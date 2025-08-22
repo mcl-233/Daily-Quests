@@ -19,7 +19,7 @@ jobs:
       # 随机延迟 0~24 小时
       - name: Random delay
         run: |
-          DELAY=$((RANDOM % 86400))
+          DELAY=$((RANDOM % 1))
           echo "等待 $DELAY 秒再执行..."
           sleep $DELAY
 
@@ -57,7 +57,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           RAND=$((RANDOM % 20))
-          if [ $RAND -lt 40 ]; then
+          if [ $RAND -lt 100 ]; then
             echo "生成每日 Issue"
             gh issue create --title "Daily Issue - $(TZ='Asia/Shanghai' date '+%Y-%m-%d')" \
                              --body "随机生成每日 Issue 🌱" \
