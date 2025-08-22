@@ -1,0 +1,135 @@
+name: Daily GitHub Activity
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天 UTC 0 点触发
+  workflow_dispatch:
+
+jobs:
+  daily-activity:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 拉取仓库
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}  # 用个人 PAT 拉取有写权限的仓库
+
+      # 随机延迟 0~24 小时
+      - name: Random delay
+        run: |
+          DELAY=$((RANDOM % 86400))
+          echo "等待 $DELAY 秒再执行..."
+          sleep $DELAY
+
+      # 确保 update.md 文件存在
+      - name: Ensure update.md exists
+        run: |
+          if [ ! -f update.md ]; then
+            echo "# Daily Commit Log" > update.md
+          fi
+
+      # 清理 7 天前日志
+      - name: Clean up logs older than 7 days
+        run: |
+          find . -name "update.md" -mtime +7 -exec rm -f {} \;
+          echo "清理完 7 天前日志"
+
+      # 提交每日日志（Commit）
+      - name: Append daily log
+        run: |
+          echo "$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S') - 自动提交日志 🌱" >> update.md
+
+      - name: Commit and push log
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add update.md
+          git commit -m "chore: daily log update" || echo "No changes to commit"
+          git push origin main
+
+      # 随机创建 Issue
+      - name: Randomly create Issue
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          RAND=$((RANDOM % 20))
+          if [ $RAND -lt 40 ]; then
+            echo "生成每日 Issue"
+            gh issue create --title "Daily Issue - $(TZ='Asia/Shanghai' date '+%Y-%m-%d')" \
+                             --body "随机生成每日 Issue 🌱" \
+                             --repo $GITHUB_REPOSITORY
+          fi
+
+      # 随机创建 PR
+      - name: Randomly create PR
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          RAND=$((RANDOM % 40))
+          if [ $RAND -lt 100 ]; then
+            BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
+            git checkout -b $BRANCH
+            echo "$(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
+            git add update.md
+            git commit -m "chore: daily PR update"
+            git push origin $BRANCH
+            gh pr create --title "Daily PR - $(TZ='Asia/Shanghai' date '+%Y-%m-%d')" \
+                         --body "随机生成每日 PR 🌱" \
+                         --base main \
+                         --head $BRANCH \
+                         --repo $GITHUB_REPOSITORY
+            fi
+
+      # 自动对自己私人仓库 PR 做 Review 并自动合并
+      - name: Auto Review and Merge Personal PR
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          TARGET_REPO="${GITHUB_REPOSITORY}"
+
+          # 获取所有 open PR
+          PR_LIST=$(gh pr list --state open --repo "$TARGET_REPO" --json number -q '.[].number')
+
+          if [ -z "$PR_LIST" ]; then
+            echo "没有找到可 review 的 PR"
+            exit 0
+          fi
+
+          # 随机选择一个 PR
+          PR_NUM=$(echo "$PR_LIST" | shuf -n1)
+          echo "准备对 PR #$PR_NUM 进行自动 Review"
+
+          # 提交 review + 评论（确保经过审查流程）
+          gh pr review "$PR_NUM" --comment --body "🤖 自动审查并评论：看起来不错！"
+
+          # 自动合并 PR（使用 squash 或 merge）
+          gh pr merge "$PR_NUM" --squash --delete-branch --repo "$TARGET_REPO" --admin
+          
+      # 定期清理已合并的旧分支（7天前）
+      - name: Clean up old merged branches
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          TARGET_REPO="${GITHUB_REPOSITORY}"
+
+          echo "开始清理 7 天前已合并的分支..."
+          # 获取所有已合并的分支
+          for branch in $(gh api repos/$TARGET_REPO/branches --paginate --jq '.[].name' | grep '^daily-pr-'); do
+            # 检查分支是否已合并进 main
+            if git branch -r --contains origin/$branch | grep -q "origin/main"; then
+              # 检查分支最后一次提交是否超过 7 天
+              LAST_COMMIT=$(gh api repos/$TARGET_REPO/commits/$branch --jq '.commit.committer.date')
+              LAST_COMMIT_TS=$(date -d "$LAST_COMMIT" +%s)
+              NOW=$(date +%s)
+              AGE=$(( (NOW - LAST_COMMIT_TS) / 86400 ))
+
+              if [ $AGE -gt 7 ]; then
+                echo "删除已合并并超过 7 天的分支: $branch"
+                git push origin --delete $branch || true
+              fi
+            fi
+          done
