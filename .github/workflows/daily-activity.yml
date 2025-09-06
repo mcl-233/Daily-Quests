@@ -17,6 +17,9 @@ permissions:
 jobs:
   daily-activity:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write # 👈 这一行是关键
 
     steps:
       # 拉取仓库
