@@ -82,7 +82,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RAND=$((RANDOM % 100))
-          if [ $RAND -lt 30 ]; then
+          if [ $RAND -lt 100 ]; then
             echo "正在生成每日 Issue..."
             gh issue create --title "Daily Issue - $(TZ='Asia/Shanghai' date '+%Y-%m-%d')" \
                              --body "随机生成每日 Issue 🌱"
@@ -96,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           RAND=$((RANDOM % 100))
-          if [ $RAND -lt 30 ]; then
+          if [ $RAND -lt 100 ]; then
             echo "正在生成每日 PR..."
             BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
             LOG_FILE="update.md"
@@ -136,7 +136,7 @@ jobs:
         run: |
           RAND=$((RANDOM % 100))
           # 30% 概率执行加星操作
-          if [ $RAND -lt 30 ]; then
+          if [ $RAND -lt 100 ]; then
             echo "正在寻找有趣的仓库并加星..."
             
             # 模拟“逛” GitHub 的行为，随机获取热门项目
