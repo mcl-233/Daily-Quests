@@ -150,10 +150,10 @@ jobs:
               echo "已成功加星。"
             else 
               echo"跳过加星操作。"
+            fi
+          else
+            echo
           fi
-        else
-          echo
-        fi
 
       # --- 定期清理已合并的旧分支（7天前） ---
       - name: Clean up old merged branches
