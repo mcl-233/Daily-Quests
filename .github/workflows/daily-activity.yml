@@ -148,10 +148,12 @@ jobs:
               # 使用 GitHub CLI 的 gh api 调用 REST API 来加星
               gh api --method PUT "user/starred/$REPO_TO_STAR"
               echo "已成功加星。"
-            else
-          else
-            echo"跳过加星操作。"
+            else 
+              echo"跳过加星操作。"
           fi
+        else
+          echo
+        fi
 
       # --- 定期清理已合并的旧分支（7天前） ---
       - name: Clean up old merged branches
