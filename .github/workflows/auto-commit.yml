@@ -10,13 +10,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 拉取仓库
+      # 1. Checkout
       - name: Checkout repo
         uses: actions/checkout@v3
         with:
           token: ${{ secrets.GH_PAT }}
 
-      # 2. 周末懒惰模式判断
+      # 2. Weekend lazy check
       - name: Weekend lazy check
         id: lazy
         run: |
@@ -24,31 +24,27 @@ jobs:
           DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 40 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
-            echo "今天周末，选择摸鱼 ✨"
             echo "今天周末，选择摸鱼 ✨" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
           fi
 
-      # 3. 随机延迟 0~6 小时
+      # 3. Random delay
       - name: Random delay
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          DELAY=$((RANDOM % 2))
-          echo "等待 $DELAY 秒再执行..."
+          DELAY=$((RANDOM % 2))    #随机延迟0~6小时
           sleep $DELAY
 
-      # 4. 确保日志文件存在
+      # 4. Ensure update.md exists
       - name: Ensure update.md exists
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          if [ ! -f update.md ]; then
-            echo "# Daily Commit Log" > update.md
-          fi
+          [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. 开场白
+      # 5. Write daily intro
       - name: Write daily intro
         if: steps.lazy.outputs.lazy != 'true'
         run: |
@@ -58,7 +54,7 @@ jobs:
           MOODS=("✨ 开始今天的 Github 冒险！" "☕ 边喝咖啡边写点代码～" "🛠️ 今天也要折腾一番！" "📖 记录一下日常操作")
           echo "${MOODS[$RANDOM % ${#MOODS[@]}]}" >> update.md
 
-      # 6. 日常随机日志
+      # 6. Append random logs
       - name: Append random logs
         if: steps.lazy.outputs.lazy != 'true'
         run: |
@@ -70,7 +66,7 @@ jobs:
             echo "[$NOW] ${THOUGHTS[$RANDOM % ${#THOUGHTS[@]}]}" >> "$LOG_FILE"
           done
 
-      # 7. 提交日志
+      # 7. Commit & push log (safe)
       - name: Commit and push log
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -79,14 +75,15 @@ jobs:
           #!/bin/bash
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git stash push --include-untracked -m "auto-stash"
-          git pull --rebase origin main || git rebase --abort
-          git stash pop || true
-          git commit -m "chore: daily log update" || echo "No changes"
-          git push origin HEAD:main
 
-      # 8. 清理七天前日志内容
+          git add update.md
+          git commit -m "chore: daily log update" || echo "No changes"
+
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+
+      # 8. Clean logs older than 7 days
       - name: Clean logs older than 7 days
         if: steps.lazy.outputs.lazy != 'true'
         run: |
@@ -94,19 +91,20 @@ jobs:
           FILE="update.md"
           if [ -f "$FILE" ]; then
             SEVEN_DAYS_AGO=$(date -d '7 days ago' '+%Y-%m-%d')
-            awk -v d="$SEVEN_DAYS_AGO" '
-              /^## / {date=$2}
-              date >= d {print}
-            ' "$FILE" > "$FILE.tmp"
+            awk -v d="$SEVEN_DAYS_AGO" '/^## / {date=$2} date >= d {print}' "$FILE" > "$FILE.tmp"
             mv "$FILE.tmp" "$FILE"
+
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add "$FILE"
             git commit -m "chore: clean logs older than 7 days" || echo "No changes"
-            git push origin main
+
+            git fetch origin main
+            git rebase origin/main || git rebase --abort
+            git push origin HEAD:main || git push --force-with-lease origin HEAD:main
           fi
 
-      # 9. 创建 Issue 或 PR（按概率）
+      # 9. Create Issue or PR (probability)
       - name: Create Issue or PR
         if: steps.lazy.outputs.lazy != 'true'
         id: issuepr
@@ -116,7 +114,7 @@ jobs:
           #!/bin/bash
           CREATED_ISSUE=0
           CREATED_PR=0
-          PROB_ISSUE=1   #30%创建Issue
+          PROB_ISSUE=100   #30%创建Issue
           PROB_PR=100      # 40%创建 PR
           RAND=$(( RANDOM % 100 + 1 ))
 
@@ -143,7 +141,7 @@ jobs:
           echo "CREATED_ISSUE=$CREATED_ISSUE" >> $GITHUB_OUTPUT
           echo "CREATED_PR=$CREATED_PR" >> $GITHUB_OUTPUT
 
-      # 10. 自动 Review + 合并 PR
+      # 10. Auto Review & Merge PR
       - name: Auto Review and Merge
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -158,7 +156,7 @@ jobs:
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$TARGET_REPO" --admin
           fi
 
-      # 11. 自动 Star + Fork（按概率）
+      # 11. Star + Fork random repos
       - name: Star and Fork random repos
         if: steps.lazy.outputs.lazy != 'true'
         id: starfork
@@ -189,7 +187,10 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add update.md
             git commit -m "chore: daily Star & Fork update" || echo "No changes"
-            git push origin HEAD:main
+
+            git fetch origin main
+            git rebase origin/main || git rebase --abort
+            git push origin HEAD:main || git push --force-with-lease origin HEAD:main
           else
             echo "今天不进行 Star/Fork 🌱" >> update.md
           fi
@@ -197,7 +198,7 @@ jobs:
           echo "STAR_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
 
-      # 12. 清理已合并 7 天前的分支
+      # 12. Clean old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -237,4 +238,8 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add update.md
           git commit -m "chore: daily summary with counts" || echo "No changes"
-          git push origin HEAD:main
+
+          # 安全同步远程再 push
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
