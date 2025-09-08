@@ -116,8 +116,8 @@ jobs:
           #!/bin/bash
           CREATED_ISSUE=0
           CREATED_PR=0
-          PROB_ISSUE=30
-          PROB_PR=40
+          PROB_ISSUE=100
+          PROB_PR=100
           RAND=$(( RANDOM % 100 + 1 ))
 
           if [ $RAND -le $PROB_ISSUE ]; then
