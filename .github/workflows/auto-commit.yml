@@ -21,7 +21,7 @@ jobs:
         id: lazy
         run: |
           #!/bin/bash
-          DOW=$(date +%u)  # 1=Mon ... 7=Sun
+          DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 40 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
             echo "今天周末，选择摸鱼 ✨"
@@ -29,11 +29,12 @@ jobs:
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
           fi
-    
+
       # 3. 随机延迟 0~6 小时
       - name: Random delay
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          #!/bin/bash
           DELAY=$((RANDOM % 2))
           echo "等待 $DELAY 秒再执行..."
           sleep $DELAY
@@ -42,6 +43,7 @@ jobs:
       - name: Ensure update.md exists
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          #!/bin/bash
           if [ ! -f update.md ]; then
             echo "# Daily Commit Log" > update.md
           fi
@@ -50,6 +52,7 @@ jobs:
       - name: Write daily intro
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          #!/bin/bash
           LOG_DATE=$(date '+%Y-%m-%d')
           echo -e "\n## $LOG_DATE" >> update.md
           MOODS=("✨ 开始今天的 Github 冒险！" "☕ 边喝咖啡边写点代码～" "🛠️ 今天也要折腾一番！" "📖 记录一下日常操作")
@@ -59,11 +62,13 @@ jobs:
       - name: Append random logs
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          #!/bin/bash
           LOG_FILE="update.md"
           for i in $(seq 1 $((RANDOM % 3 + 1))); do
             NOW=$(date '+%H:%M:%S')
             THOUGHTS=("🌱 随手记下一笔" "✍️ 突然想到点东西" "🚀 来一发 PR" "📌 打个小补丁" "🎯 试试新点子")
-            echo "[$NOW] ${THOUGHTS[$RANDOM % ${#THOUGHTS[@]}]}" >> $LOG_FILE
+            echo "[$NOW] ${THOUGHTS[$RANDOM % ${#THOUGHTS[@]}]}" >> "$LOG_FILE"
+          done
 
       # 7. 提交日志
       - name: Commit and push log
@@ -71,6 +76,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          #!/bin/bash
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
@@ -84,6 +90,7 @@ jobs:
       - name: Clean logs older than 7 days
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          #!/bin/bash
           FILE="update.md"
           if [ -f "$FILE" ]; then
             SEVEN_DAYS_AGO=$(date -d '7 days ago' '+%Y-%m-%d')
@@ -99,13 +106,14 @@ jobs:
             git push origin main
           fi
 
-      # 9. 创建 Issue 或 PR（按概率）并计数
+      # 9. 创建 Issue 或 PR（按概率）
       - name: Create Issue or PR
         if: steps.lazy.outputs.lazy != 'true'
         id: issuepr
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          #!/bin/bash
           CREATED_ISSUE=0
           CREATED_PR=0
           PROB_ISSUE=30
@@ -113,23 +121,23 @@ jobs:
           RAND=$(( RANDOM % 100 + 1 ))
 
           if [ $RAND -le $PROB_ISSUE ]; then
-              gh issue create --title "Daily Issue - $(date '+%Y-%m-%d')" \
-                              --body "随机生成每日 Issue 🌱" \
-                              --repo $GITHUB_REPOSITORY
-              CREATED_ISSUE=1
+            gh issue create --title "Daily Issue - $(date '+%Y-%m-%d')" \
+                            --body "随机生成每日 Issue 🌱" \
+                            --repo $GITHUB_REPOSITORY
+            CREATED_ISSUE=1
           elif [ $RAND -le $((PROB_ISSUE + PROB_PR)) ]; then
-              BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
-              git checkout -b $BRANCH
-              echo "$(date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
-              git add update.md
-              git commit -m "chore: daily PR update"
-              git push origin $BRANCH
-              gh pr create --title "Daily PR - $(date '+%Y-%m-%d')" \
-                           --body "随机生成每日 PR 🌱" \
-                           --base main --head $BRANCH --repo $GITHUB_REPOSITORY
-              CREATED_PR=1
+            BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
+            git checkout -b "$BRANCH"
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
+            git add update.md
+            git commit -m "chore: daily PR update"
+            git push origin "$BRANCH"
+            gh pr create --title "Daily PR - $(date '+%Y-%m-%d')" \
+                         --body "随机生成每日 PR 🌱" \
+                         --base main --head "$BRANCH" --repo $GITHUB_REPOSITORY
+            CREATED_PR=1
           else
-              echo "今天不创建 Issue 或 PR 🌱"
+            echo "今天不创建 Issue 或 PR 🌱"
           fi
 
           echo "CREATED_ISSUE=$CREATED_ISSUE" >> $GITHUB_OUTPUT
@@ -141,20 +149,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          #!/bin/bash
           TARGET_REPO="${GITHUB_REPOSITORY}"
           PR_LIST=$(gh pr list --state open --repo "$TARGET_REPO" --json number -q '.[].number')
           if [ -n "$PR_LIST" ]; then
             PR_NUM=$(echo "$PR_LIST" | shuf -n1)
             gh pr review "$PR_NUM" --comment --body "🤖 自动审查：LGTM！"
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$TARGET_REPO" --admin
+          fi
 
-      # 11. 自动 Star + Fork（按概率）并计数
-      - name: Star and Fork random repos (with probability)
+      # 11. 自动 Star + Fork（按概率）
+      - name: Star and Fork random repos
         if: steps.lazy.outputs.lazy != 'true'
         id: starfork
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          #!/bin/bash
           STAR_COUNT=0
           FORK_COUNT=0
           PROB_ACTION=50
@@ -163,7 +174,7 @@ jobs:
           if [ $RAND -le $PROB_ACTION ]; then
             ACTION_COUNT=$((RANDOM % 2 + 1))
             repos=$(gh api search/repositories -X GET -F q='stars:>50000 sort:stars' --jq '.items[].full_name' | shuf -n $ACTION_COUNT)
-            
+
             for repo in $repos; do
               gh api --method PUT "user/starred/$repo"
               echo "⭐ Starred $repo" >> update.md
@@ -181,6 +192,7 @@ jobs:
             git push origin HEAD:main
           else
             echo "今天不进行 Star/Fork 🌱" >> update.md
+          fi
 
           echo "STAR_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
@@ -191,6 +203,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          #!/bin/bash
           TARGET_REPO="${GITHUB_REPOSITORY}"
           NOW=$(date +%s)
           gh pr list --state merged --repo "$TARGET_REPO" --json number,headRefName,mergedAt -q '.[]' | while read pr; do
@@ -205,10 +218,11 @@ jobs:
             fi
           done
 
-      # 13. 日终总结（含操作统计）
+      # 13. 日终总结
       - name: Write summary
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          #!/bin/bash
           ISSUE=${{ steps.issuepr.outputs.CREATED_ISSUE }}
           PR=${{ steps.issuepr.outputs.CREATED_PR }}
           STAR=${{ steps.starfork.outputs.STAR_COUNT }}
@@ -216,8 +230,7 @@ jobs:
 
           LOG_DATE=$(date '+%Y-%m-%d')
           SUMMARY="🌙 $LOG_DATE 今日小结：$ISSUE 个 Issue, $PR 个 PR, $STAR 个 Star, $FORK 个 Fork ⭐🍴"
-          
-          # 将统计写在日志开头
+
           echo -e "$SUMMARY\n$(cat update.md)" > update.md
 
           git config user.name "github-actions[bot]"
