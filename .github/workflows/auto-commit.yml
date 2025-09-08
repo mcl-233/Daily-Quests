@@ -1,8 +1,11 @@
-name: Daily GitHub Activity
+0name: Daily GitHub Activity
+
+env:
+  TZ: Asia/Shanghai  # 全局北京时间
 
 on:
   schedule:
-    - cron: '0 00 * * *'  # UTC 每天 0 点触发
+    - cron: '0 00 * * *'  # UTC # 每天 UTC 0 点触发
   workflow_dispatch:
 
 jobs:
@@ -10,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout
+      # 1. Checkout repo
       - name: Checkout repo
         uses: actions/checkout@v3
         with:
@@ -34,7 +37,7 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          DELAY=$((RANDOM % 21600))    #随机延迟0~6小时
+          DELAY=$((RANDOM % 2))     #随机延迟0~6小时
           sleep $DELAY
 
       # 4. Ensure update.md exists
@@ -49,7 +52,7 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          LOG_DATE=$(date '+%Y-%m-%d')
+          LOG_DATE=$(date '+%Y-%m-%d %H:%M:%S')
           echo -e "\n## $LOG_DATE" >> update.md
           MOODS=("✨ 开始今天的 Github 冒险！" "☕ 边喝咖啡边写点代码～" "🛠️ 今天也要折腾一番！" "📖 记录一下日常操作")
           echo "${MOODS[$RANDOM % ${#MOODS[@]}]}" >> update.md
@@ -66,7 +69,7 @@ jobs:
             echo "[$NOW] ${THOUGHTS[$RANDOM % ${#THOUGHTS[@]}]}" >> "$LOG_FILE"
           done
 
-      # 7. Commit & push log (safe)
+      # 7. Commit & push log
       - name: Commit and push log
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -104,7 +107,7 @@ jobs:
             git push origin HEAD:main || git push --force-with-lease origin HEAD:main
           fi
 
-      # 9. Create Issue or PR (probability)
+      # 9. Create Issue or PR (概率控制)
       - name: Create Issue or PR
         if: steps.lazy.outputs.lazy != 'true'
         id: issuepr
@@ -114,12 +117,12 @@ jobs:
           #!/bin/bash
           CREATED_ISSUE=0
           CREATED_PR=0
-          PROB_ISSUE=30   #30%创建Issue
-          PROB_PR=40      # 40%创建 PR
+          PROB_ISSUE=100   #30%创建Issue
+          PROB_PR=100      # 40%创建 PR
           RAND=$(( RANDOM % 100 + 1 ))
 
           if [ $RAND -le $PROB_ISSUE ]; then
-            gh issue create --title "Daily Issue - $(date '+%Y-%m-%d')" \
+            gh issue create --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
                             --body "随机生成每日 Issue 🌱" \
                             --repo $GITHUB_REPOSITORY
             CREATED_ISSUE=1
@@ -130,7 +133,7 @@ jobs:
             git add update.md
             git commit -m "chore: daily PR update"
             git push origin "$BRANCH"
-            gh pr create --title "Daily PR - $(date '+%Y-%m-%d')" \
+            gh pr create --title "Daily PR - $(date '+%Y-%m-%d %H:%M:%S')" \
                          --body "随机生成每日 PR 🌱" \
                          --base main --head "$BRANCH" --repo $GITHUB_REPOSITORY
             CREATED_PR=1
@@ -156,7 +159,7 @@ jobs:
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$TARGET_REPO" --admin
           fi
 
-      # 11. Star + Fork random repos
+      # 11. Star and Fork random repos
       - name: Star and Fork random repos
         if: steps.lazy.outputs.lazy != 'true'
         id: starfork
@@ -198,7 +201,7 @@ jobs:
           echo "STAR_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
 
-      # 12. Clean old merged branches
+      # 12. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -219,19 +222,18 @@ jobs:
             fi
           done
 
-      # 13. 日终总结
+      # 13. Daily summary
       - name: Write summary
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          ISSUE=${{ steps.issuepr.outputs.CREATED_ISSUE }}
-          PR=${{ steps.issuepr.outputs.CREATED_PR }}
-          STAR=${{ steps.starfork.outputs.STAR_COUNT }}
-          FORK=${{ steps.starfork.outputs.FORK_COUNT }}
+          LOG_DATE=$(date '+%Y-%m-%d %H:%M:%S')
+          ISSUE=${{ steps.issuepr.outputs.CREATED_ISSUE || 0 }}
+          PR=${{ steps.issuepr.outputs.CREATED_PR || 0 }}
+          STAR=${{ steps.starfork.outputs.STAR_COUNT || 0 }}
+          FORK=${{ steps.starfork.outputs.FORK_COUNT || 0 }}
 
-          LOG_DATE=$(date '+%Y-%m-%d')
           SUMMARY="🌙 $LOG_DATE 今日小结：$ISSUE 个 Issue, $PR 个 PR, $STAR 个 Star, $FORK 个 Fork ⭐🍴"
-
           echo -e "$SUMMARY\n$(cat update.md)" > update.md
 
           git config user.name "github-actions[bot]"
@@ -239,7 +241,6 @@ jobs:
           git add update.md
           git commit -m "chore: daily summary with counts" || echo "No changes"
 
-          # 安全同步远程再 push
           git fetch origin main
           git rebase origin/main || git rebase --abort
           git push origin HEAD:main || git push --force-with-lease origin HEAD:main
