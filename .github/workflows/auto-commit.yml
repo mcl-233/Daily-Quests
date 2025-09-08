@@ -1,4 +1,4 @@
-0name: Daily GitHub Activity
+name: Daily GitHub Activity
 
 env:
   TZ: Asia/Shanghai  # 全局北京时间
