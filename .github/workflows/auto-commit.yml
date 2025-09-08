@@ -37,7 +37,7 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          DELAY=$((RANDOM % 2))     #随机延迟0~6小时
+          DELAY=$((RANDOM % 21600))     #随机延迟0~6小时
           sleep $DELAY
 
       # 4. Ensure update.md exists
@@ -117,8 +117,8 @@ jobs:
           #!/bin/bash
           CREATED_ISSUE=0
           CREATED_PR=0
-          PROB_ISSUE=100   #30%创建Issue
-          PROB_PR=100      # 40%创建 PR
+          PROB_ISSUE=30   #30%创建Issue
+          PROB_PR=40      # 40%创建 PR
           RAND=$(( RANDOM % 100 + 1 ))
 
           if [ $RAND -le $PROB_ISSUE ]; then
