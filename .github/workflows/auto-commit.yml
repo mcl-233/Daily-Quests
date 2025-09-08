@@ -20,14 +20,16 @@ jobs:
       - name: Weekend lazy check
         id: lazy
         run: |
-          DOW=$(date +%u)
-          if [ $DOW -gt 5 ] && [ $((RANDOM % 100)) -lt 40 ]; then
+          #!/bin/bash
+          DOW=$(date +%u)  # 1=Mon ... 7=Sun
+          if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 40 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
             echo "今天周末，选择摸鱼 ✨"
             echo "今天周末，选择摸鱼 ✨" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
-
+          fi
+    
       # 3. 随机延迟 0~6 小时
       - name: Random delay
         if: steps.lazy.outputs.lazy != 'true'
