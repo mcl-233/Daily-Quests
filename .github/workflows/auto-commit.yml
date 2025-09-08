@@ -37,7 +37,7 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         run: |
           #!/bin/bash
-          DELAY=$((RANDOM % 2))     #随机延迟0~6小时
+          DELAY=$((RANDOM % 21600))     #随机延迟0~6小时
           sleep $DELAY
 
       # 4. Ensure update.md exists
