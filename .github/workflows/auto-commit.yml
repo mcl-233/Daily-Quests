@@ -116,8 +116,8 @@ jobs:
           #!/bin/bash
           CREATED_ISSUE=0
           CREATED_PR=0
-          PROB_ISSUE=100
-          PROB_PR=100
+          PROB_ISSUE=1   #30%创建Issue
+          PROB_PR=100      # 40%创建 PR
           RAND=$(( RANDOM % 100 + 1 ))
 
           if [ $RAND -le $PROB_ISSUE ]; then
@@ -168,7 +168,7 @@ jobs:
           #!/bin/bash
           STAR_COUNT=0
           FORK_COUNT=0
-          PROB_ACTION=50
+          PROB_ACTION=1    #50%几率执行Star + Fork
           RAND=$(( RANDOM % 100 + 1 ))
 
           if [ $RAND -le $PROB_ACTION ]; then
