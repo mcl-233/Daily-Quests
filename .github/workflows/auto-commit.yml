@@ -6,6 +6,7 @@ env:
 on:
   schedule:
     - cron: '0 00 * * *'  # UTC # 每天 UTC 0 点触发
+    - cron: '0 06 * * *'
   workflow_dispatch:
 
 jobs:
