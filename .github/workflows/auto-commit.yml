@@ -35,7 +35,7 @@ jobs:
       - name: Random delay
         if: steps.lazy.outputs.lazy != 'true'
         run: |
-          DELAY=$((RANDOM % 21600))   # 0~6小时随机延迟
+          DELAY=$((RANDOM % 2))   # 0~6小时随机延迟
           sleep $DELAY
 
       # 4. Ensure update.md exists
@@ -61,8 +61,8 @@ jobs:
           GIT_USER: ${{ secrets.GH_USER }}
           GIT_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
-          git config user.name "MuChili230"
-          git config user.email "muc236602@gmail.com"
+          git config user.name "GH_USER"
+          git config user.email "GH_EMAIL"
 
           git add update.md
           git commit -m "chore: daily log update" || echo "No changes"
@@ -83,8 +83,8 @@ jobs:
             awk -v d="$SEVEN_DAYS_AGO" '/^## / {date=$2} date >= d {print}' "$FILE" > "$FILE.tmp"
             mv "$FILE.tmp" "$FILE"
 
-            git config user.name "MuChili230"
-            git config user.email "muc236602@gmail.com"
+            git config user.name "GH_USER"
+            git config user.email "GH_EMAIL"
 
             git add "$FILE"
             git commit -m "chore: clean logs older than 7 days" || echo "No changes"
@@ -130,8 +130,8 @@ jobs:
             BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
             git checkout -b "$BRANCH"
 
-            git config user.name "MuChili230"
-            git config user.email "muc236602@gmail.com"
+            git config user.name "GH_USER"
+            git config user.email "GH_EMAIL"
 
             echo "$(date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
             git add update.md
@@ -275,8 +275,8 @@ jobs:
           echo "- 🧹 清理日志: $CLEAN_LOG_COUNT" >> "$LOG_FILE"
           echo "- 🧹 清理分支: $CLEAN_BRANCH_COUNT" >> "$LOG_FILE"
 
-          git config user.name "MuChili230"
-          git config user.email "muc236602@gmail.com"
+          git config user.name "GH_USER"
+          git config user.email "GH_EMAIL"
 
           git add "$LOG_FILE"
           git commit -m "chore: daily summary with counts" || echo "No changes"
