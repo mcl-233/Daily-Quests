@@ -35,7 +35,7 @@ jobs:
       - name: Random delay
         if: steps.lazy.outputs.lazy != 'true'
         run: |
-          DELAY=$((RANDOM % 21600))
+          DELAY=$((RANDOM % 2))
           sleep $DELAY
 
       # 4. Ensure update.md exists
