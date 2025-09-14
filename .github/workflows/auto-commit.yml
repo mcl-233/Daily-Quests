@@ -29,6 +29,7 @@ jobs:
             echo "今天周末，选择摸鱼 ✨" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
+          fi
 
       # 3. Random delay
       - name: Random delay
