@@ -23,50 +23,44 @@ jobs:
       - name: Weekend lazy check
         id: lazy
         run: |
-          # 获取日期
-          DOW=$(date +%u 2>/dev/null || echo 0)
-          # 如果手动触发，默认不摸鱼
+          DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 20 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
+            echo "🌙 $(date '+%Y-%m-%d') 今天周末，选择摸鱼 ✨" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
           fi
 
       # 3. Random delay
       - name: Random delay
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         run: |
           DELAY=$((RANDOM % 2))
           sleep $DELAY
 
       # 4. Ensure update.md exists
       - name: Ensure update.md exists
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         run: |
           [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. Start daily log block
-      - name: Start daily log block
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+      # 5. Add daily date header
+      - name: Add daily date header
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          cat <<EOF >> update.md
-<details>
-<summary>🌙 $(date '+%Y-%m-%d')</summary>
-
-\`\`\`log
-EOF
+          echo -e "\n🌙 $(date '+%Y-%m-%d')\n" >> update.md
           git add update.md
-          git commit -m "chore: start daily log block" || echo "No changes"
+          git commit -m "chore: add daily date header" || echo "No changes"
           git push origin HEAD:main
 
-      # 6. Commit update.md
+      # 6. Commit update.md (每天必提交)
       - name: Commit update.md
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
@@ -80,11 +74,15 @@ EOF
 
       # 7. Create Issue
       - name: Create Issue
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           RAND=$((RANDOM % 100 + 1))
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           if [ $RAND -le 35 ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
@@ -102,7 +100,7 @@ EOF
 
       # 8. Create Pull Request
       - name: Create Pull Request
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GH_USER: ${{ secrets.GH_USER }}
@@ -130,7 +128,7 @@ EOF
 
       # 9. Auto Review & Merge PR
       - name: Auto Review and Merge
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GH_USER: ${{ secrets.GH_USER }}
@@ -140,7 +138,7 @@ EOF
           git config user.email "$GH_EMAIL"
           PR_LIST=$(gh pr list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$PR_LIST" ]; then
-          PR_NUM=$(echo "$PR_LIST" | shuf -n1)
+            PR_NUM=$(echo "$PR_LIST" | shuf -n1)
             gh pr review "$PR_NUM" --comment --body "🤖 自动审查：LGTM！"
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$GITHUB_REPOSITORY" --admin
             echo "[$(date '+%H:%M:%S')] ✅ 自动合并了 PR #$PR_NUM" >> update.md
@@ -151,9 +149,11 @@ EOF
 
       # 10. Auto Close Issues
       - name: Auto Close Issues
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
@@ -169,37 +169,59 @@ EOF
           git commit -m "chore: update closed issue log" || echo "No changes"
           git push origin HEAD:main
 
-      # 11. Star & Fork 热门仓库
-      - name: Star and Fork random repos
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+      # 11. Star & Fork all repos of a specific user (with duplicate check)
+      - name: Star & Fork user repos
+        if: steps.lazy.outputs.lazy != 'true'
+        id: starforkuser
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          PROB_ACTION=30
-          RAND=$((RANDOM % 100 + 1))
-          git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
-          if [ $RAND -le $PROB_ACTION ]; then
-            COUNT=$((RANDOM % 2 + 1))
-            repos=$(gh api search/repositories -X GET -F q='stars:>50000' --jq '.items[].full_name' | shuf -n $COUNT)
-            for repo in $repos; do
-              gh api --method PUT "user/starred/$repo"
-              echo "[$(date '+%H:%M:%S')] ⭐ Starred $repo" >> update.md
-              gh repo fork "$repo" --clone=false
-              echo "[$(date '+%H:%M:%S')] 🍴 Forked $repo" >> update.md
-            done
-          else
-            echo "[$(date '+%H:%M:%S')] 🌿 今天不进行 Star/Fork" >> update.md
-          fi
-          git add update.md
-          git commit -m "chore: update star/fork log" || echo "No changes"
-          git push origin HEAD:main
+          TARGET_USER="MooCheelee"  # 👈 改成你要操作的 GitHub 用户名
 
+          echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
+          repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
+
+          STAR_COUNT=0
+          FORK_COUNT=0
+
+          for repo in $repos; do
+            echo "检查仓库: $repo"
+
+            # ⭐ 检查是否已加星
+            if gh api "user/starred/$repo" &>/dev/null; then
+              echo "✅ 已加星过 $repo，跳过 ⭐"
+            else
+              gh api --method PUT "user/starred/$repo"
+              echo "⭐ Starred $repo" >> update.md
+              STAR_COUNT=$((STAR_COUNT+1))
+            fi
+
+            # 🍴 检查是否已 Fork
+            USERNAME=$(echo "$repo" | cut -d'/' -f1)
+            REPONAME=$(echo "$repo" | cut -d'/' -f2)
+            MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
+
+            if gh repo view "$MY_REPO" &>/dev/null; then
+              echo "✅ 已 Fork 过 $repo，跳过 🍴"
+            else
+              gh repo fork "$repo" --clone=false --default-branch-only
+              echo "🍴 Forked $repo" >> update.md
+              FORK_COUNT=$((FORK_COUNT+1))
+            fi
+          done
+
+          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
+
+          echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
+          echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
+          
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
+        if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
@@ -218,21 +240,4 @@ EOF
           done
           git add update.md
           git commit -m "chore: update cleaned branches log" || echo "No changes"
-          git push origin HEAD:main
-
-      # 13. Close daily log block
-      - name: Close daily log block
-        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
-        env:
-          GH_USER: ${{ secrets.GH_USER }}
-          GH_EMAIL: ${{ secrets.GH_EMAIL }}
-        run: |
-          git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
-          cat <<EOF >> update.md
-\`\`\`
-</details>
-EOF
-          git add update.md
-          git commit -m "chore: close daily log block" || echo "No changes"
           git push origin HEAD:main
