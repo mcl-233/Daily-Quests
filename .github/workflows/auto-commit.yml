@@ -82,11 +82,14 @@ jobs:
           if [ $RAND -le $PROB_ISSUE ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
-            ISSUE_NUM=$(gh issue create --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
-                            --body "随机生成每日 Issue 🌱" \
-                            --label "$LABEL" \
-                            --repo $GITHUB_REPOSITORY --json number -q '.number')
-            echo -e "\n### 📝 创建的 Issue\n- $TIME - Issue #$ISSUE_NUM ($LABEL)" >> update.md
+            TITLE="Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')"
+            gh issue create \
+              --title "$TITLE" \
+              --body "随机生成每日 Issue 🌱" \
+              --label "$LABEL" \
+              --repo $GITHUB_REPOSITORY
+            # 日志中直接写标题，不依赖编号
+            echo -e "\n### 📝 创建的 Issue\n- $TIME - $TITLE ($LABEL)" >> update.md
           else
             echo -e "\n### 📝 创建的 Issue\n- $TIME - 今天不创建 Issue" >> update.md
           fi
@@ -111,11 +114,14 @@ jobs:
             git add update.md
             git commit -m "chore: daily PR update"
             git push origin "$BRANCH"
-            PR_NUM=$(gh pr create --title "Daily PR - $(date '+%Y-%m-%d %H:%M:%S')" \
-                     --body "随机生成每日 PR 🌱" \
-                     --base main --head "$BRANCH" --repo $GITHUB_REPOSITORY --json number -q '.number')
-            # 更新日志中 PR 编号
-            sed -i "s/自动 PR 日志/PR #$PR_NUM 自动提交/" update.md
+            TITLE="Daily PR - $(date '+%Y-%m-%d %H:%M:%S')"
+            gh pr create \
+              --title "$TITLE" \
+              --body "随机生成每日 PR 🌱" \
+              --base main --head "$BRANCH" \
+              --repo $GITHUB_REPOSITORY
+            # 日志里直接记录标题
+            sed -i "s/自动 PR 日志/$TITLE/" update.md
           else
             echo -e "\n### 📦 创建的 PR\n- $TIME - 今天不创建 PR" >> update.md
           fi
