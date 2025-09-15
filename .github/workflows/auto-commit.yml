@@ -26,7 +26,6 @@ jobs:
           DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 20 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
-            echo "🌙 $(date '+%Y-%m-%d') 今天周末，选择摸鱼 ✨" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
           fi
@@ -44,8 +43,8 @@ jobs:
         run: |
           [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. Add daily date header
-      - name: Add daily date header
+      # 5. Start daily log block
+      - name: Start daily log block
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_USER: ${{ secrets.GH_USER }}
@@ -53,9 +52,12 @@ jobs:
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          echo -e "\n🌙 $(date '+%Y-%m-%d')\n" >> update.md
+          echo -e "\n<details>\n<summary>🌙 $(date '+%Y-%m-%d')</summary>\n\n```log" >> update.md
+          if [ "${{ steps.lazy.outputs.lazy }}" = "true" ]; then
+            echo "[$(date '+%H:%M:%S')] ✨ 今天周末，选择摸鱼" >> update.md
+          fi
           git add update.md
-          git commit -m "chore: add daily date header" || echo "No changes"
+          git commit -m "chore: start daily log block" || echo "No changes"
           git push origin HEAD:main
 
       # 6. Commit update.md (每天必提交)
@@ -77,12 +79,8 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GH_USER: ${{ secrets.GH_USER }}
-          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           RAND=$((RANDOM % 100 + 1))
-          git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
           if [ $RAND -le 35 ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
@@ -152,8 +150,6 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GH_USER: ${{ secrets.GH_USER }}
-          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
@@ -174,8 +170,6 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GH_USER: ${{ secrets.GH_USER }}
-          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           PROB_ACTION=30
           RAND=$((RANDOM % 100 + 1))
@@ -202,8 +196,6 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          GH_USER: ${{ secrets.GH_USER }}
-          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
@@ -222,4 +214,18 @@ jobs:
           done
           git add update.md
           git commit -m "chore: update cleaned branches log" || echo "No changes"
+          git push origin HEAD:main
+
+      # 13. Close daily log block
+      - name: Close daily log block
+        if: steps.lazy.outputs.lazy != 'true'
+        env:
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
+        run: |
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
+          echo "```\n</details>" >> update.md
+          git add update.md
+          git commit -m "chore: close daily log block" || echo "No changes"
           git push origin HEAD:main
