@@ -5,7 +5,7 @@ env:
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # UTC 0 点触发 = 北京时间 8 点
+    - cron: '0 00 * * *'  # UTC 0 点触发 = 北京时间 8 点
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
           DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 20 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
-            echo "😴 今天是周末，选择摸鱼 ✨" >> update.md
+            echo "今天周末，选择摸鱼 ✨" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
           fi
@@ -38,38 +38,38 @@ jobs:
           DELAY=$((RANDOM % 2))
           sleep $DELAY
 
-      # 4. Ensure update.md exists and add daily header
-      - name: Prepare daily log
+      # 4. Ensure update.md exists
+      - name: Ensure update.md exists
         if: steps.lazy.outputs.lazy != 'true'
         run: |
-          [ -f update.md ] || echo "# Daily Commit Log" > update.md
-          TODAY=$(date '+%Y-%m-%d')
-          echo -e "\n### 🌞 $TODAY Daily Activity\n----------------------------------------" >> update.md
+          [ -f update.md ] || echo "# 🌿 每日 GitHub 活动日志\n\n## 📅 日期：$(date '+%Y-%m-%d')" > update.md
 
-      # 5. Random commit
+      # 5. Random commit (深绿格子)
       - name: Commit update.md
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
-          PROB_COMMIT=60
+          PROB_COMMIT=70
           RAND=$((RANDOM % 100 + 1))
-          git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
+          TIME=$(date '+%H:%M:%S')
+          [ -f update.md ] || echo "# 🌿 每日 GitHub 活动日志\n\n## 📅 日期：$(date '+%Y-%m-%d')" > update.md
+
           if [ $RAND -le $PROB_COMMIT ]; then
-            echo "📦 提交日志" >> update.md
+            git config user.name "$GH_USER"
+            git config user.email "$GH_EMAIL"
+            echo -e "\n### 🌱 日志更新\n- $TIME - 日志更新" >> update.md
             git add update.md
             git commit -m "chore: daily log update" || echo "No changes"
             git fetch origin main
             git rebase origin/main || git rebase --abort
             git push origin HEAD:main || git push --force-with-lease origin HEAD:main
-            echo "✅ Commit update.md" >> update.md
           else
-            echo "❌ 跳过 Commit update.md" >> update.md
+            echo -e "\n### 🌱 日志更新\n- $TIME - 今天不 commit" >> update.md
           fi
 
-      # 6. Create Issue
+      # 6. Create Issue (浅绿格子)
       - name: Create Issue
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -77,20 +77,21 @@ jobs:
         run: |
           PROB_ISSUE=35
           RAND=$((RANDOM % 100 + 1))
+          TIME=$(date '+%H:%M:%S')
+
           if [ $RAND -le $PROB_ISSUE ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
-            gh issue create \
-              --title "Daily Issue - $(date '+%Y-%m-%d')" \
-              --body "随机生成每日 Issue 🌱" \
-              --label "$LABEL" \
-              --repo $GITHUB_REPOSITORY
-            echo "✅ 创建 Issue (标签: $LABEL)" >> update.md
+            ISSUE_NUM=$(gh issue create --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
+                            --body "随机生成每日 Issue 🌱" \
+                            --label "$LABEL" \
+                            --repo $GITHUB_REPOSITORY --json number -q '.number')
+            echo -e "\n### 📝 创建的 Issue\n- $TIME - Issue #$ISSUE_NUM ($LABEL)" >> update.md
           else
-            echo "❌ 跳过 Issue 创建" >> update.md
+            echo -e "\n### 📝 创建的 Issue\n- $TIME - 今天不创建 Issue" >> update.md
           fi
 
-      # 7. Create Pull Request
+      # 7. Create Pull Request (浅绿格子)
       - name: Create Pull Request
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -100,55 +101,57 @@ jobs:
         run: |
           PROB_PR=35
           RAND=$((RANDOM % 100 + 1))
-          git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
+          TIME=$(date '+%H:%M:%S')
           if [ $RAND -le $PROB_PR ]; then
             BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
             git checkout -b "$BRANCH"
-            echo "📦 自动 PR 日志" >> update.md
+            git config user.name "$GH_USER"
+            git config user.email "$GH_EMAIL"
+            echo -e "\n### 📦 创建的 PR\n- $TIME - 自动 PR 日志" >> update.md
             git add update.md
             git commit -m "chore: daily PR update"
             git push origin "$BRANCH"
-            gh pr create --title "Daily PR - $(date '+%Y-%m-%d')" \
-                         --body "随机生成每日 PR 🌱" \
-                         --base main --head "$BRANCH" --repo $GITHUB_REPOSITORY
-            echo "✅ 创建 PR (分支: $BRANCH)" >> update.md
+            PR_NUM=$(gh pr create --title "Daily PR - $(date '+%Y-%m-%d %H:%M:%S')" \
+                     --body "随机生成每日 PR 🌱" \
+                     --base main --head "$BRANCH" --repo $GITHUB_REPOSITORY --json number -q '.number')
+            # 更新日志中 PR 编号
+            sed -i "s/自动 PR 日志/PR #$PR_NUM 自动提交/" update.md
           else
-            echo "❌ 跳过 PR 创建" >> update.md
+            echo -e "\n### 📦 创建的 PR\n- $TIME - 今天不创建 PR" >> update.md
           fi
 
-      # 8. Auto Review & Merge PR
+      # 8. Auto Review & Merge PR (浅绿格子)
       - name: Auto Review and Merge
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          TIME=$(date '+%H:%M:%S')
           PR_LIST=$(gh pr list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$PR_LIST" ]; then
             PR_NUM=$(echo "$PR_LIST" | shuf -n1)
             gh pr review "$PR_NUM" --comment --body "🤖 自动审查：LGTM！"
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$GITHUB_REPOSITORY" --admin
-            echo "✅ 自动合并 PR #$PR_NUM" >> update.md
-          else
-            echo "❌ 没有可合并的 PR" >> update.md
+            echo -e "\n### ✅ 合并的 PR\n- $TIME - 合并 PR #$PR_NUM" >> update.md
           fi
 
-      # 9. Auto Close Issues
+      # 9. Auto Close Issues (浅绿格子)
       - name: Auto Close Issues
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          TIME=$(date '+%H:%M:%S')
           ISSUE_LIST=$(gh issue list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$ISSUE_LIST" ]; then
             ISSUE_NUM=$(echo "$ISSUE_LIST" | shuf -n1)
             gh issue close "$ISSUE_NUM" --repo "$GITHUB_REPOSITORY"
-            echo "✅ 自动关闭 Issue #$ISSUE_NUM" >> update.md
+            echo -e "\n### 🚫 关闭的 Issue\n- $TIME - Issue #$ISSUE_NUM 自动关闭" >> update.md
           else
-            echo "❌ 没有需要关闭的 Issue" >> update.md
+            echo -e "\n### 🚫 关闭的 Issue\n- $TIME - 无需关闭 Issue" >> update.md
           fi
 
-      # 11. Star & Fork all repos of a specific user (with duplicate check)
+      # 10. Star & Fork all repos of a specific user (with duplicate check)
       - name: Star & Fork user repos
         if: steps.lazy.outputs.lazy != 'true'
         id: starforkuser
@@ -194,13 +197,16 @@ jobs:
           echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
 
-      # 11. Clean up old merged branches
+      # 11. Clean up old merged branches and clean logs
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          TIME=$(date '+%H:%M:%S')
           NOW=$(date +%s)
+
+          # 清理分支
           gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json number,headRefName,mergedAt -q '.[]' | while read pr; do
             PR_NUM=$(echo "$pr" | jq -r '.number')
             BRANCH=$(echo "$pr" | jq -r '.headRefName')
@@ -209,34 +215,45 @@ jobs:
             AGE=$(( (NOW - MERGED_TS) / 86400 ))
             if [[ "$BRANCH" == daily-pr-* && $AGE -gt 7 ]]; then
               git push origin --delete "$BRANCH" || true
-              echo "🗑️ 删除已合并超过 7 天的分支 $BRANCH (#$PR_NUM)" >> update.md
+              echo -e "\n### 🗑️ 清理分支\n- $TIME - 删除已合并超过 7 天的分支 $BRANCH" >> update.md
             fi
           done
 
-      # 12. Clean up old update.md logs (保留最近 7 天)
-      - name: Clean up old logs
+          # 清理日志示例
+          echo -e "\n### 🧹 清理日志\n- $TIME - 清理超过 7 天的旧日志" >> update.md
+
+      # 12. Daily summary
+      - name: Write summary
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          NOW=$(date '+%Y-%m-%d %H:%M:%S')
+          LOG_FILE="update.md"
+
+          COMMIT_COUNT=$(grep -c '### 🌱 日志更新' $LOG_FILE || echo 0)
+          ISSUE_COUNT=$(grep -c '### 📝 创建的 Issue' $LOG_FILE || echo 0)
+          PR_COUNT=$(grep -c '### 📦 创建的 PR' $LOG_FILE || echo 0)
+          MERGED_COUNT=$(grep -c '### ✅ 合并的 PR' $LOG_FILE || echo 0)
+          CLOSED_COUNT=$(grep -c '### 🚫 关闭的 Issue' $LOG_FILE || echo 0)
+          CLEAN_LOG_COUNT=$(grep -c '### 🧹 清理日志' $LOG_FILE || echo 0)
+          CLEAN_BRANCH_COUNT=$(grep -c '### 🗑️ 清理分支' $LOG_FILE || echo 0)
+
+          echo -e "\n---\n\n## 🌙 今日总结" >> "$LOG_FILE"
+          echo "[$NOW] 今日任务完成 ✅" >> "$LOG_FILE"
+          echo "- 📝 日志条目: $COMMIT_COUNT" >> "$LOG_FILE"
+          echo "- 🔧 创建 Issue: $ISSUE_COUNT" >> "$LOG_FILE"
+          echo "- 📦 创建 PR: $PR_COUNT" >> "$LOG_FILE"
+          echo "- ✅ 合并 PR: $MERGED_COUNT" >> "$LOG_FILE"
+          echo "- 🚫 关闭 Issue: $CLOSED_COUNT" >> "$LOG_FILE"
+          echo "- 🧹 清理日志: $CLEAN_LOG_COUNT" >> "$LOG_FILE"
+          echo "- 🗑️ 清理分支: $CLEAN_BRANCH_COUNT" >> "$LOG_FILE"
+
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          
-          # 删除 update.md 中 7 天前的条目
-          TMP_FILE=$(mktemp)
-          awk -v date="$(date -d '-7 days' '+%Y-%m-%d')" '
-            BEGIN { keep=0 }
-            /^### 🌞/ { 
-              keep = ($2 >= date)
-            }
-            keep { print }
-          ' update.md > "$TMP_FILE"
-          
-          mv "$TMP_FILE" update.md
-          git add update.md
-          git commit -m "chore: clean old logs" || echo "❌ 没有需要清理的日志"
+          git add "$LOG_FILE"
+          git commit -m "chore: daily summary with counts" || echo "No changes"
           git fetch origin main
           git rebase origin/main || git rebase --abort
           git push origin HEAD:main || git push --force-with-lease origin HEAD:main
-          echo "🧹 清理超过 7 天的日志" >> update.md
