@@ -44,7 +44,7 @@ jobs:
         run: |
           [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. Commit update.md
+      # 5. Commit update.md (每天必提交)
       - name: Commit update.md
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -65,9 +65,13 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           PROB_ISSUE=35
           RAND=$((RANDOM % 100 + 1))
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           if [ $RAND -le $PROB_ISSUE ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
@@ -79,6 +83,11 @@ jobs:
           else
             echo "今天不创建 Issue 🌿" >> update.md
           fi
+          git add update.md
+          git commit -m "chore: update issue log" || echo "No changes"
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
 
       # 7. Create Pull Request
       - name: Create Pull Request
@@ -90,11 +99,11 @@ jobs:
         run: |
           PROB_PR=35
           RAND=$((RANDOM % 100 + 1))
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           if [ $RAND -le $PROB_PR ]; then
             BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
             git checkout -b "$BRANCH"
-            git config user.name "$GH_USER"
-            git config user.email "$GH_EMAIL"
             echo "$(date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
             git add update.md
             git commit -m "chore: daily PR update"
@@ -105,19 +114,33 @@ jobs:
           else
             echo "今天不创建 PR 🌿" >> update.md
           fi
+          git add update.md
+          git commit -m "chore: update PR log" || echo "No changes"
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
 
       # 8. Auto Review & Merge PR
       - name: Auto Review and Merge
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           PR_LIST=$(gh pr list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$PR_LIST" ]; then
             PR_NUM=$(echo "$PR_LIST" | shuf -n1)
             gh pr review "$PR_NUM" --comment --body "🤖 自动审查：LGTM！"
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$GITHUB_REPOSITORY" --admin
             echo "✅ 自动合并了 PR #$PR_NUM" >> update.md
+            git add update.md
+            git commit -m "chore: update merged PR log" || echo "No changes"
+            git fetch origin main
+            git rebase origin/main || git rebase --abort
+            git push origin HEAD:main || git push --force-with-lease origin HEAD:main
           fi
 
       # 9. Auto Close Issues
@@ -125,7 +148,11 @@ jobs:
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           ISSUE_LIST=$(gh issue list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$ISSUE_LIST" ]; then
             ISSUE_NUM=$(echo "$ISSUE_LIST" | shuf -n1)
@@ -134,15 +161,24 @@ jobs:
           else
             echo "🎉 没有需要关闭的 Issue" >> update.md
           fi
+          git add update.md
+          git commit -m "chore: update closed issue log" || echo "No changes"
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
 
       # 10. Star & Fork 热门仓库
       - name: Star and Fork random repos
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           PROB_ACTION=30
           RAND=$((RANDOM % 100 + 1))
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           if [ $RAND -le $PROB_ACTION ]; then
             COUNT=$((RANDOM % 2 + 1))
             repos=$(gh api search/repositories -X GET -F q='stars:>50000' --jq '.items[].full_name' | shuf -n $COUNT)
@@ -155,13 +191,22 @@ jobs:
           else
             echo "今天不进行 Star/Fork 🌿" >> update.md
           fi
+          git add update.md
+          git commit -m "chore: update star/fork log" || echo "No changes"
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
 
       # 11. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_USER: ${{ secrets.GH_USER }}
+          GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          git config user.name "$GH_USER"
+          git config user.email "$GH_EMAIL"
           NOW=$(date +%s)
           gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json number,headRefName,mergedAt -q '.[]' | while read pr; do
             PR_NUM=$(echo "$pr" | jq -r '.number')
@@ -171,8 +216,14 @@ jobs:
             AGE=$(( (NOW - MERGED_TS) / 86400 ))
             if [[ "$BRANCH" == daily-pr-* && $AGE -gt 7 ]]; then
               git push origin --delete "$BRANCH" || true
+              echo "🗑️ 删除已合并超过 7 天的分支: $BRANCH" >> update.md
             fi
           done
+          git add update.md
+          git commit -m "chore: update cleaned branches log" || echo "No changes"
+          git fetch origin main
+          git rebase origin/main || git rebase --abort
+          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
 
       # 12. Daily summary
       - name: Write summary
