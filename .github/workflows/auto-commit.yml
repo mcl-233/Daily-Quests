@@ -152,26 +152,36 @@ jobs:
             echo "❌ 没有需要关闭的 Issue" >> update.md
           fi
 
-      # 10. Star & Fork repos
+      # 10. Star & Fork repos (Star 后立即 Fork)
       - name: Star & Fork repos
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           TARGET_USER: ${{ secrets.TARGET_USER }}
         run: |
-          REPOS=$(gh repo list "$TARGET_USER" --limit 5 --json nameWithOwner -q '.[].nameWithOwner')
+          # 每天随机获取 3~5 个仓库
+          COUNT=$((RANDOM % 3 + 3))
+          REPOS=$(gh repo list "$TARGET_USER" --limit $COUNT --json nameWithOwner -q '.[].nameWithOwner')
+
           for REPO in $REPOS; do
-            if (( RANDOM % 2 )); then
-              gh api -X PUT "repos/$REPO/starred"
-              echo "✅ Star 了仓库: $REPO" >> update.md
-            else
-              echo "❌ 跳过 Star 仓库: $REPO" >> update.md
+            echo "🔍 处理仓库: $REPO"
+
+            # 检查是否已 Star
+            if gh api "/user/starred/$REPO" >/dev/null 2>&1; then
+              echo "⚠️ 已经 Star 过仓库: $REPO" >> update.md
+              continue
             fi
-            if (( RANDOM % 2 )); then
-              gh repo fork "$REPO" --clone=false
-              echo "✅ Fork 了仓库: $REPO" >> update.md
+
+            # ⭐ Star
+            gh api -X PUT -H "Accept: application/vnd.github+json" "/user/starred/$REPO" --silent
+            echo "⭐ Star -> $REPO" >> update.md
+
+            # 🍴 Fork（只有 Star 成功后才 Fork）
+            if gh repo view "${{ github.repository_owner }}/$(basename $REPO)" >/dev/null 2>&1; then
+              echo "⚠️ 已经 Fork 过仓库: $REPO" >> update.md
             else
-              echo "❌ 跳过 Fork 仓库: $REPO" >> update.md
+              gh repo fork "$REPO" --clone=false --remote=false
+              echo "🍴 Fork -> $REPO" >> update.md
             fi
           done
 
