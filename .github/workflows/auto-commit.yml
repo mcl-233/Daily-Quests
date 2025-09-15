@@ -43,7 +43,7 @@ jobs:
         run: |
           [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. Start daily log block
+      # 5. Start daily log block (here document)
       - name: Start daily log block
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -52,10 +52,12 @@ jobs:
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          echo -e "\n<details>\n<summary>🌙 $(date '+%Y-%m-%d')</summary>\n\n```log" >> update.md
-          if [ "${{ steps.lazy.outputs.lazy }}" = "true" ]; then
-            echo "[$(date '+%H:%M:%S')] ✨ 今天周末，选择摸鱼" >> update.md
-          fi
+          cat <<EOF >> update.md
+<details>
+<summary>🌙 $(date '+%Y-%m-%d')</summary>
+
+\`\`\`log
+EOF
           git add update.md
           git commit -m "chore: start daily log block" || echo "No changes"
           git push origin HEAD:main
@@ -225,7 +227,10 @@ jobs:
         run: |
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          echo "```\n</details>" >> update.md
+          cat <<EOF >> update.md
+\`\`\`
+</details>
+EOF
           git add update.md
           git commit -m "chore: close daily log block" || echo "No changes"
           git push origin HEAD:main
