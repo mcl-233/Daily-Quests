@@ -49,10 +49,12 @@ jobs:
         run: |
           set -e
           TIME=$(date '+%H:%M:%S')
-          [ -f update.md ] || echo -e "# 🌿 每日 GitHub 活动日志\n\n**日期：$(date '+%Y-%m-%d')**\n" > update.md
+          if [ ! -f update.md ]; then
+            echo -e "# 🌿 每日 GitHub 活动日志\n\n**日期：$(date '+%Y-%m-%d')**\n" > update.md
+          fi
           echo "- 📄 $TIME 确认 update.md 文件存在" >> update.md
 
-      # 5. Commit
+      # 5. Commit update.md
       - name: Commit update.md
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -94,7 +96,7 @@ jobs:
           else
             echo "- 📝 $TIME 今天不创建 Issue" >> update.md
 
-      # 7. Create PR
+      # 7. Create Pull Request
       - name: Create Pull Request
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -152,53 +154,36 @@ jobs:
           else
             echo "- 🚫 $TIME 无需关闭 Issue" >> update.md
 
-      # 11. Star & Fork all repos of a specific user (with duplicate check)
+      # 10. Star & Fork user repos
       - name: Star & Fork user repos
         if: steps.lazy.outputs.lazy != 'true'
-        id: starforkuser
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          TARGET_USER="MooCheelee"  # 👈 改成你要操作的 GitHub 用户名
-
-          echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
+          set -e
+          TIME=$(date '+%H:%M:%S')
+          TARGET_USER="MooCheelee"
           repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
-
           STAR_COUNT=0
           FORK_COUNT=0
-
           for repo in $repos; do
-            echo "检查仓库: $repo"
-
-            # ⭐ 检查是否已加星
-            if gh api "user/starred/$repo" &>/dev/null; then
-              echo "✅ 已加星过 $repo，跳过 ⭐"
-            else
+            if ! gh api "user/starred/$repo" &>/dev/null; then
               gh api --method PUT "user/starred/$repo"
-              echo "⭐ Starred $repo" >> update.md
+              echo "- ⭐ $TIME Starred $repo" >> update.md
               STAR_COUNT=$((STAR_COUNT+1))
             fi
-
-            # 🍴 检查是否已 Fork
             USERNAME=$(echo "$repo" | cut -d'/' -f1)
             REPONAME=$(echo "$repo" | cut -d'/' -f2)
             MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
-
-            if gh repo view "$MY_REPO" &>/dev/null; then
-              echo "✅ 已 Fork 过 $repo，跳过 🍴"
-            else
+            if ! gh repo view "$MY_REPO" &>/dev/null; then
               gh repo fork "$repo" --clone=false --default-branch-only
-              echo "🍴 Forked $repo" >> update.md
+              echo "- 🍴 $TIME Forked $repo" >> update.md
               FORK_COUNT=$((FORK_COUNT+1))
             fi
           done
+          echo "- ⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
 
-          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
-
-          echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
-          echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
-
-      # 10. Clean up old merged branches and logs
+      # 11. Clean up old merged branches and logs
       - name: Clean up old merged branches and logs
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -208,13 +193,12 @@ jobs:
           TIME=$(date '+%H:%M:%S')
           NOW=$(date +%s)
           REMOTE_BRANCHES=$(git ls-remote --heads origin | awk '{print $2}' | sed 's|refs/heads/||')
-
-          gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json number,headRefName,mergedAt -q '.[]' | while read pr; do
+          PR_JSON=$(gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json number,headRefName,mergedAt -q '.[]')
+          echo "$PR_JSON" | jq -c '.' | while read pr; do
             BRANCH=$(echo "$pr" | jq -r '.headRefName')
             MERGED_AT=$(echo "$pr" | jq -r '.mergedAt')
             MERGED_TS=$(date -u -d "$MERGED_AT" +%s)
             AGE=$(( (NOW - MERGED_TS) / 86400 ))
-
             if [[ "$BRANCH" == daily-pr-* && $AGE -gt 7 ]]; then
               if echo "$REMOTE_BRANCHES" | grep -q "^$BRANCH$"; then
                 git push origin --delete "$BRANCH" || true
@@ -222,10 +206,9 @@ jobs:
               fi
             fi
           done
-
           echo "- 🧹 $TIME 清理超过 7 天的旧日志" >> update.md
 
-      # 11. Daily summary
+      # 12. Daily summary
       - name: Write summary
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -242,7 +225,6 @@ jobs:
           CLOSED_COUNT=$(grep -c '🚫' $LOG_FILE || echo 0)
           CLEAN_LOG_COUNT=$(grep -c '🧹' $LOG_FILE || echo 0)
           CLEAN_BRANCH_COUNT=$(grep -c '🗑️' $LOG_FILE || echo 0)
-
           echo -e "\n---\n\n🌙 **今日总结 [$NOW]**" >> "$LOG_FILE"
           echo "- 📝 日志条目: $COMMIT_COUNT" >> "$LOG_FILE"
           echo "- 🔧 创建 Issue: $ISSUE_COUNT" >> "$LOG_FILE"
@@ -251,7 +233,6 @@ jobs:
           echo "- 🚫 关闭 Issue: $CLOSED_COUNT" >> "$LOG_FILE"
           echo "- 🧹 清理日志: $CLEAN_LOG_COUNT" >> "$LOG_FILE"
           echo "- 🗑️ 清理分支: $CLEAN_BRANCH_COUNT" >> "$LOG_FILE"
-
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
           git add "$LOG_FILE"
