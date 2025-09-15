@@ -38,7 +38,6 @@ jobs:
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
             echo "- 💪 工作日，正常执行 ($TIME)" >> update.md
-          fi
 
       # 4. Random delay
       - name: Random delay
@@ -75,7 +74,7 @@ jobs:
           git rebase origin/main || git rebase --abort
           git push origin HEAD:main || git push --force-with-lease origin HEAD:main
 
-      # 7. Create Issue
+      # 7. Create Issue with label check
       - name: Create Issue
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -207,15 +206,22 @@ jobs:
             echo "- 🗑️ 无需删除旧分支 ($TIME)"
           else
             echo "$MERGED_BRANCHES" | while read BRANCH; do
-              MERGED_AT=$(gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json headRefName,mergedAt -q ".[] | select(.headRefName==\"$BRANCH\") | .mergedAt")
-              MERGED_TS=$(date -u -d "$MERGED_AT" +%s)
-              AGE=$(( (NOW - MERGED_TS) / 86400 ))
-              if [ $AGE -gt 7 ]; then
-                git push origin --delete "$BRANCH" || true
-                echo "- 🗑️ 删除已合并超过 7 天的分支 $BRANCH ($TIME)" >> update.md
+              # 检查远程分支是否存在
+              if git ls-remote --exit-code --heads origin "$BRANCH" &>/dev/null; then
+                MERGED_AT=$(gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json headRefName,mergedAt -q ".[] | select(.headRefName==\"$BRANCH\") | .mergedAt")
+                MERGED_TS=$(date -u -d "$MERGED_AT" +%s)
+                AGE=$(( (NOW - MERGED_TS) / 86400 ))
+                if [ $AGE -gt 7 ]; then
+                  git push origin --delete "$BRANCH" || true
+                  echo "- 🗑️ 删除已合并超过 7 天的分支 $BRANCH ($TIME)" >> update.md
+                fi
+              else
+                echo "- ✅ 分支 $BRANCH 已不存在，跳过删除 ($TIME)" >> update.md
               fi
             done
           fi
+
+          # 清理日志
           echo "- 🧹 清理超过 7 天的旧日志 ($TIME)" >> update.md
 
       # 13. Daily summary
@@ -227,6 +233,7 @@ jobs:
         run: |
           NOW=$(date '+%Y-%m-%d %H:%M:%S')
           LOG_FILE="update.md"
+
           COMMIT_COUNT=$(grep -c '🌱' $LOG_FILE || echo 0)
           ISSUE_COUNT=$(grep -c '📝' $LOG_FILE || echo 0)
           PR_COUNT=$(grep -c '📦' $LOG_FILE || echo 0)
@@ -234,6 +241,7 @@ jobs:
           CLOSED_COUNT=$(grep -c '🚫' $LOG_FILE || echo 0)
           CLEAN_LOG_COUNT=$(grep -c '🧹' $LOG_FILE || echo 0)
           CLEAN_BRANCH_COUNT=$(grep -c '🗑️' $LOG_FILE || echo 0)
+
           echo -e "\n---\n\n## 🌙 今日总结 ($NOW)" >> "$LOG_FILE"
           echo "- 🌱 日志条目: $COMMIT_COUNT" >> "$LOG_FILE"
           echo "- 📝 创建 Issue: $ISSUE_COUNT" >> "$LOG_FILE"
@@ -242,6 +250,7 @@ jobs:
           echo "- 🚫 关闭 Issue: $CLOSED_COUNT" >> "$LOG_FILE"
           echo "- 🧹 清理日志: $CLEAN_LOG_COUNT" >> "$LOG_FILE"
           echo "- 🗑️ 清理分支: $CLEAN_BRANCH_COUNT" >> "$LOG_FILE"
+
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
           git add "$LOG_FILE"
