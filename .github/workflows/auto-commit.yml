@@ -23,7 +23,9 @@ jobs:
       - name: Weekend lazy check
         id: lazy
         run: |
-          DOW=$(date +%u)
+          # 获取日期
+          DOW=$(date +%u 2>/dev/null || echo 0)
+          # 如果手动触发，默认不摸鱼
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 20 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
           else
@@ -32,20 +34,20 @@ jobs:
 
       # 3. Random delay
       - name: Random delay
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         run: |
           DELAY=$((RANDOM % 2))
           sleep $DELAY
 
       # 4. Ensure update.md exists
       - name: Ensure update.md exists
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         run: |
           [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. Start daily log block (here document)
+      # 5. Start daily log block
       - name: Start daily log block
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
@@ -62,9 +64,9 @@ EOF
           git commit -m "chore: start daily log block" || echo "No changes"
           git push origin HEAD:main
 
-      # 6. Commit update.md (每天必提交)
+      # 6. Commit update.md
       - name: Commit update.md
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
@@ -78,7 +80,7 @@ EOF
 
       # 7. Create Issue
       - name: Create Issue
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
@@ -100,7 +102,7 @@ EOF
 
       # 8. Create Pull Request
       - name: Create Pull Request
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GH_USER: ${{ secrets.GH_USER }}
@@ -128,7 +130,7 @@ EOF
 
       # 9. Auto Review & Merge PR
       - name: Auto Review and Merge
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
           GH_USER: ${{ secrets.GH_USER }}
@@ -138,7 +140,7 @@ EOF
           git config user.email "$GH_EMAIL"
           PR_LIST=$(gh pr list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$PR_LIST" ]; then
-            PR_NUM=$(echo "$PR_LIST" | shuf -n1)
+          PR_NUM=$(echo "$PR_LIST" | shuf -n1)
             gh pr review "$PR_NUM" --comment --body "🤖 自动审查：LGTM！"
             gh pr merge "$PR_NUM" --squash --delete-branch --repo "$GITHUB_REPOSITORY" --admin
             echo "[$(date '+%H:%M:%S')] ✅ 自动合并了 PR #$PR_NUM" >> update.md
@@ -149,7 +151,7 @@ EOF
 
       # 10. Auto Close Issues
       - name: Auto Close Issues
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
@@ -169,7 +171,7 @@ EOF
 
       # 11. Star & Fork 热门仓库
       - name: Star and Fork random repos
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
@@ -195,7 +197,7 @@ EOF
 
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
@@ -220,7 +222,7 @@ EOF
 
       # 13. Close daily log block
       - name: Close daily log block
-        if: steps.lazy.outputs.lazy != 'true'
+        if: steps.lazy.outputs.lazy != 'true' || github.event_name == 'workflow_dispatch'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
