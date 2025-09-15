@@ -26,7 +26,7 @@ jobs:
           DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 20 ]; then
             echo "lazy=true" >> $GITHUB_OUTPUT
-            echo "今天周末，选择摸鱼 ✨" >> update.md
+            echo "✨ 周末偷懒，今天摸鱼" >> update.md
           else
             echo "lazy=false" >> $GITHUB_OUTPUT
           fi
@@ -44,29 +44,29 @@ jobs:
         run: |
           [ -f update.md ] || echo "# Daily Commit Log" > update.md
 
-      # 5. Random commit (深绿格子)
+      # 5. Random commit
       - name: Commit update.md
         if: steps.lazy.outputs.lazy != 'true'
         env:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
-          PROB_COMMIT=60
+          PROB_COMMIT=70
           RAND=$((RANDOM % 100 + 1))
           if [ $RAND -le $PROB_COMMIT ]; then
             git config user.name "$GH_USER"
             git config user.email "$GH_EMAIL"
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - 日志更新 🌱" >> update.md
+            echo "📦 提交日志 -> $(date '+%Y-%m-%d %H:%M:%S')" >> update.md
             git add update.md
             git commit -m "chore: daily log update" || echo "No changes"
             git fetch origin main
             git rebase origin/main || git rebase --abort
             git push origin HEAD:main || git push --force-with-lease origin HEAD:main
           else
-            echo "今天不 commit 🌿" >> update.md
+            echo "🌿 今天不提交代码" >> update.md
           fi
 
-      # 6. Create Issue (浅绿格子)
+      # 6. Create Issue
       - name: Create Issue
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -77,16 +77,19 @@ jobs:
           if [ $RAND -le $PROB_ISSUE ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
-            gh issue create --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
-                            --body "随机生成每日 Issue 🌱" \
-                            --label "$LABEL" \
-                            --repo $GITHUB_REPOSITORY
-            echo "📝 创建了一个 Issue ($LABEL)" >> update.md
+            ISSUE_JSON=$(gh issue create \
+              --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
+              --body "随机生成每日 Issue 🌱" \
+              --label "$LABEL" \
+              --repo $GITHUB_REPOSITORY \
+              --json number)
+            ISSUE_NUM=$(echo "$ISSUE_JSON" | jq -r '.number')
+            echo "📝 创建 Issue #$ISSUE_NUM ($LABEL)" >> update.md
           else
-            echo "今天不创建 Issue 🌿" >> update.md
+            echo "🌿 今天不创建 Issue" >> update.md
           fi
 
-      # 7. Create Pull Request (浅绿格子)
+      # 7. Create Pull Request
       - name: Create Pull Request
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -101,7 +104,7 @@ jobs:
             git checkout -b "$BRANCH"
             git config user.name "$GH_USER"
             git config user.email "$GH_EMAIL"
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
+            echo "📦 创建 PR -> 分支: $BRANCH" >> update.md
             git add update.md
             git commit -m "chore: daily PR update"
             git push origin "$BRANCH"
@@ -109,10 +112,10 @@ jobs:
                          --body "随机生成每日 PR 🌱" \
                          --base main --head "$BRANCH" --repo $GITHUB_REPOSITORY
           else
-            echo "今天不创建 PR 🌿" >> update.md
+            echo "🌿 今天不创建 PR" >> update.md
           fi
 
-      # 8. Auto Review & Merge PR (浅绿格子)
+      # 8. Auto Review & Merge PR
       - name: Auto Review and Merge
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -126,7 +129,7 @@ jobs:
             echo "✅ 自动合并了 PR #$PR_NUM" >> update.md
           fi
 
-      # 9. Auto Close Issues (浅绿格子)
+      # 9. Auto Close Issues
       - name: Auto Close Issues
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -136,58 +139,35 @@ jobs:
           if [ -n "$ISSUE_LIST" ]; then
             ISSUE_NUM=$(echo "$ISSUE_LIST" | shuf -n1)
             gh issue close "$ISSUE_NUM" --repo "$GITHUB_REPOSITORY"
-            echo "🚫 自动关闭了 Issue #$ISSUE_NUM" >> update.md
+            echo "🚫 自动关闭 Issue #$ISSUE_NUM" >> update.md
           else
             echo "🎉 没有需要关闭的 Issue" >> update.md
           fi
 
-      # 11. Star & Fork all repos of a specific user (with duplicate check)
-      - name: Star & Fork user repos
+      # 10. Star & Fork repos of target user
+      - name: Star & Fork repos
         if: steps.lazy.outputs.lazy != 'true'
-        id: starforkuser
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
+          TARGET_USER: ${{ secrets.STAR_FORK_USER }}
         run: |
-          TARGET_USER="MooCheelee"  # 👈 改成你要操作的 GitHub 用户名
+          for repo in $(gh repo list $TARGET_USER --json name -q '.[].name'); do
+            FULL_REPO="$TARGET_USER/$repo"
 
-          echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
-          repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
-
-          STAR_COUNT=0
-          FORK_COUNT=0
-
-          for repo in $repos; do
-            echo "检查仓库: $repo"
-
-            # ⭐ 检查是否已加星
-            if gh api "user/starred/$repo" &>/dev/null; then
-              echo "✅ 已加星过 $repo，跳过 ⭐"
-            else
-              gh api --method PUT "user/starred/$repo"
-              echo "⭐ Starred $repo" >> update.md
-              STAR_COUNT=$((STAR_COUNT+1))
+            # Star 检查
+            if ! gh api "/user/starred/$FULL_REPO" >/dev/null 2>&1; then
+              gh api --method PUT -H "Accept: application/vnd.github+json" "/user/starred/$FULL_REPO"
+              echo "⭐ Star -> $FULL_REPO" >> update.md
             fi
 
-            # 🍴 检查是否已 Fork
-            USERNAME=$(echo "$repo" | cut -d'/' -f1)
-            REPONAME=$(echo "$repo" | cut -d'/' -f2)
-            MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
-
-            if gh repo view "$MY_REPO" &>/dev/null; then
-              echo "✅ 已 Fork 过 $repo，跳过 🍴"
-            else
-              gh repo fork "$repo" --clone=false --default-branch-only
-              echo "🍴 Forked $repo" >> update.md
-              FORK_COUNT=$((FORK_COUNT+1))
+            # Fork 检查
+            if ! gh repo view "$GITHUB_REPOSITORY_OWNER/$repo" >/dev/null 2>&1; then
+              gh repo fork "$FULL_REPO" --clone=false --remote=false
+              echo "🍴 Fork -> $FULL_REPO" >> update.md
             fi
           done
 
-          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
-
-          echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
-          echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
-          
-      # 11. Clean up old merged branches (不影响格子)
+      # 11. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
         env:
@@ -202,6 +182,7 @@ jobs:
             AGE=$(( (NOW - MERGED_TS) / 86400 ))
             if [[ "$BRANCH" == daily-pr-* && $AGE -gt 7 ]]; then
               git push origin --delete "$BRANCH" || true
+              echo "🗑️ 删除已合并超过 7 天的分支 -> $BRANCH" >> update.md
             fi
           done
 
@@ -214,25 +195,17 @@ jobs:
         run: |
           NOW=$(date +"%Y-%m-%d %H:%M:%S")
           LOG_FILE="update.md"
-          LOG_COUNT=$(grep -c '🌱' $LOG_FILE || echo 0)
-          ISSUE_COUNT=$(grep -c '📝 创建了一个 Issue' $LOG_FILE || echo 0)
-          PR_COUNT=$(grep -c '📦 提交了一个 PR' $LOG_FILE || echo 0)
-          MERGED_COUNT=$(grep -c '✅ 自动合并了 PR' $LOG_FILE || echo 0)
-          STAR_COUNT=$(grep -c '⭐' $LOG_FILE || echo 0)
-          FORK_COUNT=$(grep -c '🍴' $LOG_FILE || echo 0)
-          CLEAN_LOG_COUNT=$(grep -c '清理超过 7 天的旧日志' $LOG_FILE || echo 0)
-          CLEAN_BRANCH_COUNT=$(grep -c '🗑️ 删除已合并超过 7 天的分支' $LOG_FILE || echo 0)
 
           echo -e "\n### 🌙 今日总结" >> "$LOG_FILE"
           echo "[$NOW] 今日任务完成 ✅" >> "$LOG_FILE"
-          echo "- 📝 日志条目: $LOG_COUNT" >> "$LOG_FILE"
-          echo "- 🔧 创建 Issue: $ISSUE_COUNT" >> "$LOG_FILE"
-          echo "- 📦 创建 PR: $PR_COUNT" >> "$LOG_FILE"
-          echo "- ✅ 合并 PR: $MERGED_COUNT" >> "$LOG_FILE"
-          echo "- ⭐ Star: $STAR_COUNT" >> "$LOG_FILE"
-          echo "- 🍴 Fork: $FORK_COUNT" >> "$LOG_FILE"
-          echo "- 🧹 清理日志: $CLEAN_LOG_COUNT" >> "$LOG_FILE"
-          echo "- 🧹 清理分支: $CLEAN_BRANCH_COUNT" >> "$LOG_FILE"
+          echo "- 📦 提交次数: $(grep -c '📦 提交日志' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- 📝 创建 Issue: $(grep -c '📝 创建 Issue' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- 📦 创建 PR: $(grep -c '📦 创建 PR' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- ✅ 合并 PR: $(grep -c '✅ 自动合并了 PR' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- 🚫 关闭 Issue: $(grep -c '🚫 自动关闭 Issue' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- ⭐ Star: $(grep -c '⭐ Star' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- 🍴 Fork: $(grep -c '🍴 Fork' $LOG_FILE)" >> "$LOG_FILE"
+          echo "- 🗑️ 清理分支: $(grep -c '🗑️ 删除已合并' $LOG_FILE)" >> "$LOG_FILE"
 
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
@@ -241,4 +214,3 @@ jobs:
           git fetch origin main
           git rebase origin/main || git rebase --abort
           git push origin HEAD:main || git push --force-with-lease origin HEAD:main
-       
