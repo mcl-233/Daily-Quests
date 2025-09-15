@@ -23,6 +23,7 @@ jobs:
       - name: Weekend lazy check
         id: lazy
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           DOW=$(date +%u)
           if [ "$DOW" -gt 5 ] && [ $((RANDOM % 100)) -lt 20 ]; then
@@ -36,6 +37,7 @@ jobs:
       - name: Random delay
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           DELAY=$((RANDOM % 2))
           echo "- ⏳ $TIME 随机延迟 $DELAY 秒" >> update.md
@@ -45,6 +47,7 @@ jobs:
       - name: Ensure update.md exists
         if: steps.lazy.outputs.lazy != 'true'
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           [ -f update.md ] || echo -e "# 🌿 每日 GitHub 活动日志\n\n**日期：$(date '+%Y-%m-%d')**\n" > update.md
           echo "- 📄 $TIME 确认 update.md 文件存在" >> update.md
@@ -56,6 +59,7 @@ jobs:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           PROB_COMMIT=60
           RAND=$((RANDOM % 100 + 1))
@@ -77,6 +81,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           PROB_ISSUE=35
           RAND=$((RANDOM % 100 + 1))
@@ -97,6 +102,7 @@ jobs:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           PROB_PR=35
           RAND=$((RANDOM % 100 + 1))
@@ -120,6 +126,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           PR_LIST=$(gh pr list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$PR_LIST" ]; then
@@ -135,6 +142,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           ISSUE_LIST=$(gh issue list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$ISSUE_LIST" ]; then
@@ -196,20 +204,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
+          set -e
           TIME=$(date '+%H:%M:%S')
           NOW=$(date +%s)
-
-          # 获取远程分支列表
           REMOTE_BRANCHES=$(git ls-remote --heads origin | awk '{print $2}' | sed 's|refs/heads/||')
 
-          # 清理分支
           gh pr list --state merged --repo "$GITHUB_REPOSITORY" --json number,headRefName,mergedAt -q '.[]' | while read pr; do
             BRANCH=$(echo "$pr" | jq -r '.headRefName')
             MERGED_AT=$(echo "$pr" | jq -r '.mergedAt')
             MERGED_TS=$(date -u -d "$MERGED_AT" +%s)
             AGE=$(( (NOW - MERGED_TS) / 86400 ))
 
-            # 只删除存在且超过 7 天的 daily-pr-* 分支
             if [[ "$BRANCH" == daily-pr-* && $AGE -gt 7 ]]; then
               if echo "$REMOTE_BRANCHES" | grep -q "^$BRANCH$"; then
                 git push origin --delete "$BRANCH" || true
@@ -218,7 +223,6 @@ jobs:
             fi
           done
 
-          # 清理日志
           echo "- 🧹 $TIME 清理超过 7 天的旧日志" >> update.md
 
       # 11. Daily summary
@@ -228,6 +232,7 @@ jobs:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
+          set -e
           NOW=$(date '+%Y-%m-%d %H:%M:%S')
           LOG_FILE="update.md"
           COMMIT_COUNT=$(grep -c '🌱' $LOG_FILE || echo 0)
