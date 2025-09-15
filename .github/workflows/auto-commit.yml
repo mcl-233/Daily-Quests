@@ -56,9 +56,7 @@ jobs:
           echo "$(date '+%Y-%m-%d %H:%M:%S') - 日志更新 🌱" >> update.md
           git add update.md
           git commit -m "chore: daily log update" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+          git push origin HEAD:main
 
       # 6. Create Issue
       - name: Create Issue
@@ -68,11 +66,10 @@ jobs:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
-          PROB_ISSUE=35
           RAND=$((RANDOM % 100 + 1))
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          if [ $RAND -le $PROB_ISSUE ]; then
+          if [ $RAND -le 35 ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
             gh issue create --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
@@ -85,9 +82,7 @@ jobs:
           fi
           git add update.md
           git commit -m "chore: update issue log" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+          git push origin HEAD:main
 
       # 7. Create Pull Request
       - name: Create Pull Request
@@ -97,11 +92,10 @@ jobs:
           GH_USER: ${{ secrets.GH_USER }}
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
-          PROB_PR=35
           RAND=$((RANDOM % 100 + 1))
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          if [ $RAND -le $PROB_PR ]; then
+          if [ $RAND -le 35 ]; then
             BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
             git checkout -b "$BRANCH"
             echo "$(date '+%Y-%m-%d %H:%M:%S') - 自动 PR 日志 🌱" >> update.md
@@ -116,9 +110,7 @@ jobs:
           fi
           git add update.md
           git commit -m "chore: update PR log" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+          git push origin HEAD:main
 
       # 8. Auto Review & Merge PR
       - name: Auto Review and Merge
@@ -138,9 +130,7 @@ jobs:
             echo "✅ 自动合并了 PR #$PR_NUM" >> update.md
             git add update.md
             git commit -m "chore: update merged PR log" || echo "No changes"
-            git fetch origin main
-            git rebase origin/main || git rebase --abort
-            git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+            git push origin HEAD:main
           fi
 
       # 9. Auto Close Issues
@@ -152,7 +142,7 @@ jobs:
           GH_EMAIL: ${{ secrets.GH_EMAIL }}
         run: |
           git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
+          git config user.emai "$GH_EMAIL"
           ISSUE_LIST=$(gh issue list --state open --repo "$GITHUB_REPOSITORY" --json number -q '.[].number')
           if [ -n "$ISSUE_LIST" ]; then
             ISSUE_NUM=$(echo "$ISSUE_LIST" | shuf -n1)
@@ -163,9 +153,7 @@ jobs:
           fi
           git add update.md
           git commit -m "chore: update closed issue log" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+          git push origin HEAD:main
 
       # 10. Star & Fork 热门仓库
       - name: Star and Fork random repos
@@ -193,9 +181,7 @@ jobs:
           fi
           git add update.md
           git commit -m "chore: update star/fork log" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+          git push origin HEAD:main
 
       # 11. Clean up old merged branches
       - name: Clean up old merged branches
@@ -221,43 +207,4 @@ jobs:
           done
           git add update.md
           git commit -m "chore: update cleaned branches log" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
-
-      # 12. Daily summary
-      - name: Write summary
-        if: steps.lazy.outputs.lazy != 'true'
-        env:
-          GH_USER: ${{ secrets.GH_USER }}
-          GH_EMAIL: ${{ secrets.GH_EMAIL }}
-        run: |
-          NOW=$(date +"%Y-%m-%d %H:%M:%S")
-          LOG_FILE="update.md"
-          LOG_COUNT=$(grep -c '🌱' $LOG_FILE || echo 0)
-          ISSUE_COUNT=$(grep -c '📝 创建了一个 Issue' $LOG_FILE || echo 0)
-          PR_COUNT=$(grep -c '📦 提交了一个 PR' $LOG_FILE || echo 0)
-          MERGED_COUNT=$(grep -c '✅ 自动合并了 PR' $LOG_FILE || echo 0)
-          STAR_COUNT=$(grep -c '⭐' $LOG_FILE || echo 0)
-          FORK_COUNT=$(grep -c '🍴' $LOG_FILE || echo 0)
-          CLEAN_LOG_COUNT=$(grep -c '清理超过 7 天的旧日志' $LOG_FILE || echo 0)
-          CLEAN_BRANCH_COUNT=$(grep -c '🗑️ 删除已合并超过 7 天的分支' $LOG_FILE || echo 0)
-
-          echo -e "\n### 🌙 今日总结" >> "$LOG_FILE"
-          echo "[$NOW] 今日任务完成 ✅" >> "$LOG_FILE"
-          echo "- 📝 日志条目: $LOG_COUNT" >> "$LOG_FILE"
-          echo "- 🔧 创建 Issue: $ISSUE_COUNT" >> "$LOG_FILE"
-          echo "- 📦 创建 PR: $PR_COUNT" >> "$LOG_FILE"
-          echo "- ✅ 合并 PR: $MERGED_COUNT" >> "$LOG_FILE"
-          echo "- ⭐ Star: $STAR_COUNT" >> "$LOG_FILE"
-          echo "- 🍴 Fork: $FORK_COUNT" >> "$LOG_FILE"
-          echo "- 🧹 清理日志: $CLEAN_LOG_COUNT" >> "$LOG_FILE"
-          echo "- 🧹 清理分支: $CLEAN_BRANCH_COUNT" >> "$LOG_FILE"
-
-          git config user.name "$GH_USER"
-          git config user.email "$GH_EMAIL"
-          git add "$LOG_FILE"
-          git commit -m "chore: daily summary with counts" || echo "No changes"
-          git fetch origin main
-          git rebase origin/main || git rebase --abort
-          git push origin HEAD:main || git push --force-with-lease origin HEAD:main
+          git push origin HEAD:main
