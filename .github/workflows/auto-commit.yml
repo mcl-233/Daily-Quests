@@ -88,6 +88,14 @@ jobs:
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
             TITLE="Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')"
+
+            # 检查标签是否存在，如果不存在就创建
+            if ! gh label view "$LABEL" --repo "$GITHUB_REPOSITORY" &>/dev/null; then
+              echo "- 🏷️ 标签 $LABEL 不存在，自动创建 ($TIME)" >> update.md
+              gh label create "$LABEL" --color FF69B4 --description "自动创建的标签" --repo "$GITHUB_REPOSITORY"
+            fi
+
+            # 创建 Issue
             gh issue create --title "$TITLE" --body "随机生成每日 Issue 🌱" --label "$LABEL" --repo $GITHUB_REPOSITORY
             echo "- 📝 创建 Issue ($LABEL) ($TIME)" >> update.md
           else
