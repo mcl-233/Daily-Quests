@@ -176,45 +176,90 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          TARGET_USER="MooCheelee"  # 👈 改成你要操作的 GitHub 用户名
-
+          TARGET_USER="MooCheelee"
           echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
+
+          # 获取目标用户所有仓库
           repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
+          REPO_COUNT=$(echo "$repos" | wc -l)
 
-          STAR_COUNT=0
-          FORK_COUNT=0
+          # 根据仓库数量设置并行数（最多 8，最少 2）
+          if (( REPO_COUNT <= 5 )); then
+            PARALLEL=2
+          elif (( REPO_COUNT <= 20 )); then
+            PARALLEL=4
+          else
+            PARALLEL=8
+          fi
 
-          for repo in $repos; do
-            echo "检查仓库: $repo"
+          echo "共有 $REPO_COUNT 个仓库，使用 $PARALLEL 个并行任务处理"
 
-            # ⭐ 检查是否已加星
-            if gh api "user/starred/$repo" &>/dev/null; then
-              echo "✅ 已加星过 $repo，跳过 ⭐"
+          # 获取自己已 Star 仓库
+          starred=$(gh repo list --json nameWithOwner -q '.[].nameWithOwner')
+          starred_set=$(echo "$starred" | sort)
+
+          # 获取自己所有仓库（用于判断 Fork）
+          my_repos=$(gh repo list $GITHUB_ACTOR --json nameWithOwner -q '.[].nameWithOwner')
+          my_repos_set=$(echo "$my_repos" | sort)
+
+          process_repo() {
+            repo=$1
+            log=""
+            star_count=0
+            fork_count=0
+
+            # ⭐ Star 判断
+            if echo "$starred_set" | grep -qx "$repo"; then
+              :
             else
               gh api --method PUT "user/starred/$repo"
-              echo "⭐ Starred $repo" >> update.md
-              STAR_COUNT=$((STAR_COUNT+1))
+              log+="⭐ Starred $repo\n"
+              star_count=1
             fi
 
-            # 🍴 检查是否已 Fork
-            USERNAME=$(echo "$repo" | cut -d'/' -f1)
+            # 🍴 Fork 判断
             REPONAME=$(echo "$repo" | cut -d'/' -f2)
             MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
 
-            if gh repo view "$MY_REPO" &>/dev/null; then
-              echo "✅ 已 Fork 过 $repo，跳过 🍴"
+            if echo "$my_repos_set" | grep -qx "$MY_REPO"; then
+              :
             else
               gh repo fork "$repo" --clone=false --default-branch-only
-              echo "🍴 Forked $repo" >> update.md
-              FORK_COUNT=$((FORK_COUNT+1))
+              log+="🍴 Forked $repo\n"
+              fork_count=1
             fi
-          done
 
+            # 输出日志和计数，用逗号分隔
+            echo -e "$log"
+           echo "$star_count,$fork_count"
+          }
+
+          # 并行处理仓库
+          results=$(echo "$repos" | xargs -n1 -P$PARALLEL -I{} bash -c 'process_repo "$@"' _ {})
+
+          # 汇总结果
+          STAR_COUNT=0
+          FORK_COUNT=0
+          LOGS=""
+
+          while IFS= read -r line; do
+            if [[ $line == *,* ]]; then
+              sc=$(echo $line | cut -d',' -f1)
+              fc=$(echo $line | cut -d',' -f2)
+              STAR_COUNT=$((STAR_COUNT+sc))
+              FORK_COUNT=$((FORK_COUNT+fc))
+            else
+              LOGS+="$line\n"
+            fi
+          done <<< "$results"
+
+          # 写入日志
+          echo -e "$LOGS" >> update.md
           echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
 
           echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
-          
+
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
