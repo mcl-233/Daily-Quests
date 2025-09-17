@@ -177,100 +177,63 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           TARGET_USER="MooCheelee"
-          MAX_PARALLEL=8      # 最大并发任务数
-          TIMEOUT_SEC=30       # 每个 fork/star 最大执行时间（秒）
+          MAX_PARALLEL=8
+          TIMEOUT_SEC=30
           LOG_FILE="update.md"
           FAILED_FILE="failed.txt"
 
           echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
 
-          # 初始化日志
           : > "$LOG_FILE"
           : > "$FAILED_FILE"
 
-          # 获取目标用户所有仓库
           repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
-
-          # 获取自己已 Star 仓库
           starred_set=$(gh repo list --json nameWithOwner -q '.[].nameWithOwner' | sort)
-
-          # 获取自己所有仓库（用于判断 Fork）
           my_repos_set=$(gh repo list $GITHUB_ACTOR --json nameWithOwner -q '.[].nameWithOwner' | sort)
 
-          process_repo() {
-            repo=$1
-            log=""
-            star_count=0
-            fork_count=0
+          # 将函数内联到 bash -c 中
+          echo "$repos" | xargs -n1 -P$MAX_PARALLEL -I{} bash -c '
+          repo="{}"
+          starred_set="$0"
+          my_repos_set="$1"
+          GITHUB_ACTOR="$2"
+          LOG_FILE="$3"
+          FAILED_FILE="$4"
+          TIMEOUT_SEC="$5"
 
-            # ⭐ Star 判断
-            if echo "$starred_set" | grep -qx "$repo"; then
-              :
+          log=""
+          star_count=0
+          fork_count=0
+
+          # Star
+          if ! echo "$starred_set" | grep -qx "$repo"; then
+            if timeout "$TIMEOUT_SEC"s gh api --method PUT "user/starred/$repo"; then
+              log+="⭐ Starred $repo\n"
+              star_count=1
             else
-              if timeout ${TIMEOUT_SEC}s gh api --method PUT "user/starred/$repo"; then
-                log+="⭐ Starred $repo\n"
-                star_count=1
-              else
-                echo "$repo star 失败" >> "$FAILED_FILE"
-              fi
+              echo "$repo star 失败" >> "$FAILED_FILE"
             fi
-
-            # 🍴 Fork 判断
-            REPONAME=$(echo "$repo" | cut -d"/" -f2)
-            MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
-
-            if echo "$my_repos_set" | grep -qx "$MY_REPO"; then
-              :
-            else
-              if timeout ${TIMEOUT_SEC}s gh repo fork "$repo" --clone=false --default-branch-only; then
-                log+="🍴 Forked $repo\n"
-                fork_count=1
-              else
-                echo "$repo fork 失败" >> "$FAILED_FILE"
-              fi
-            fi
-
-            # 写日志
-            {
-              echo -e "$log"
-              echo "$star_count,$fork_count"
-            } >> update.tmp
-          }
-
-          # 并行执行
-          echo "$repos" | xargs -n1 -P$MAX_PARALLEL -I{} bash -c 'process_repo "$@"' _ {}
-
-          # 汇总结果
-          STAR_COUNT=0
-          FORK_COUNT=0
-          LOGS=""
-
-          while IFS= read -r line; do
-            if [[ $line == *,* ]]; then
-              sc=$(echo $line | cut -d',' -f1)
-              fc=$(echo $line | cut -d',' -f2)
-              STAR_COUNT=$((STAR_COUNT + sc))
-              FORK_COUNT=$((FORK_COUNT + fc))
-            else
-              LOGS+="$line\n"
-            fi
-          done < update.tmp
-
-          # 写最终日志
-          echo -e "$LOGS" >> "$LOG_FILE"
-          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> "$LOG_FILE"
-          echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
-          echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
-
-          # 删除临时文件
-          rm -f update.tmp
-
-          # 输出失败列表
-          if [[ -s "$FAILED_FILE" ]]; then
-            echo "以下仓库操作失败，可重试："
-            cat "$FAILED_FILE"
           fi
 
+          # Fork
+          REPONAME=$(echo "$repo" | cut -d"/" -f2)
+          MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
+          if ! echo "$my_repos_set" | grep -qx "$MY_REPO"; then
+            if timeout "$TIMEOUT_SEC"s gh repo fork "$repo" --clone=false --default-branch-only; then
+              log+="🍴 Forked $repo\n"
+              fork_count=1
+            else
+              echo "$repo fork 失败" >> "$FAILED_FILE"
+            fi
+          fi
+
+          # 写日志
+          {
+            echo -e "$log"
+            echo "$star_count,$fork_count"
+          } >> "$LOG_FILE"
+          ' _ "$starred_set" "$my_repos_set" "$GITHUB_ACTOR" "$LOG_FILE" "$FAILED_FILE" "$TIMEOUT_SEC"
+          
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
