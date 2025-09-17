@@ -177,37 +177,28 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           TARGET_USER="MooCheelee"
+          MAX_PARALLEL=8      # 最大并发任务数
+          TIMEOUT_SEC=30       # 每个 fork/star 最大执行时间（秒）
+          LOG_FILE="update.md"
+          FAILED_FILE="failed.txt"
+
           echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
+
+          # 初始化日志
+          : > "$LOG_FILE"
+          : > "$FAILED_FILE"
 
           # 获取目标用户所有仓库
           repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
 
           # 获取自己已 Star 仓库
-          starred=$(gh repo list --json nameWithOwner -q '.[].nameWithOwner')
-          starred_set=$(echo "$starred" | sort)
+          starred_set=$(gh repo list --json nameWithOwner -q '.[].nameWithOwner' | sort)
 
           # 获取自己所有仓库（用于判断 Fork）
-          my_repos=$(gh repo list $GITHUB_ACTOR --json nameWithOwner -q '.[].nameWithOwner')
-          my_repos_set=$(echo "$my_repos" | sort)
+          my_repos_set=$(gh repo list $GITHUB_ACTOR --json nameWithOwner -q '.[].nameWithOwner' | sort)
 
-          # 并行限制（可调整，太高可能触发 rate limit）
-          MAX_PARALLEL=8
-          CURRENT_JOBS=0
-
-          # 创建日志文件
-          : > update.md
-
-          increment_jobs() {
-            CURRENT_JOBS=$((CURRENT_JOBS + 1))
-          }
-
-          decrement_jobs() {
-            CURRENT_JOBS=$((CURRENT_JOBS - 1))
-          }
-
-          process_repo_async() {
+          process_repo() {
             repo=$1
-
             log=""
             star_count=0
             fork_count=0
@@ -216,9 +207,12 @@ jobs:
             if echo "$starred_set" | grep -qx "$repo"; then
               :
             else
-              gh api --method PUT "user/starred/$repo"
-              log+="⭐ Starred $repo\n"
-              star_count=1
+              if timeout ${TIMEOUT_SEC}s gh api --method PUT "user/starred/$repo"; then
+                log+="⭐ Starred $repo\n"
+                star_count=1
+              else
+                echo "$repo star 失败" >> "$FAILED_FILE"
+              fi
             fi
 
             # 🍴 Fork 判断
@@ -228,37 +222,29 @@ jobs:
             if echo "$my_repos_set" | grep -qx "$MY_REPO"; then
               :
             else
-              gh repo fork "$repo" --clone=false --default-branch-only
-              log+="🍴 Forked $repo\n"
-              fork_count=1
+              if timeout ${TIMEOUT_SEC}s gh repo fork "$repo" --clone=false --default-branch-only; then
+                log+="🍴 Forked $repo\n"
+                fork_count=1
+              else
+                echo "$repo fork 失败" >> "$FAILED_FILE"
+              fi
             fi
 
-            # 写入日志（原子操作）
+            # 写日志
             {
-            echo -e "$log"
-            echo "$star_count,$fork_count"
+              echo -e "$log"
+              echo "$star_count,$fork_count"
             } >> update.tmp
           }
 
-          # 遍历仓库
-          for repo in $repos; do
-            # 控制并行数
-            while (( CURRENT_JOBS >= MAX_PARALLEL )); do
-              sleep 0.5
-            done
-
-            process_repo_async "$repo" &
-            increment_jobs
-          done
-
-          # 等待所有后台任务完成
-          wait
+          # 并行执行
+          echo "$repos" | xargs -n1 -P$MAX_PARALLEL -I{} bash -c 'process_repo "$@"' _ {}
 
           # 汇总结果
           STAR_COUNT=0
           FORK_COUNT=0
           LOGS=""
- 
+
           while IFS= read -r line; do
             if [[ $line == *,* ]]; then
               sc=$(echo $line | cut -d',' -f1)
@@ -271,14 +257,19 @@ jobs:
           done < update.tmp
 
           # 写最终日志
-          echo -e "$LOGS" >> update.md
-          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
-
+          echo -e "$LOGS" >> "$LOG_FILE"
+          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> "$LOG_FILE"
           echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
 
           # 删除临时文件
           rm -f update.tmp
+
+          # 输出失败列表
+          if [[ -s "$FAILED_FILE" ]]; then
+            echo "以下仓库操作失败，可重试："
+            cat "$FAILED_FILE"
+          fi
 
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
