@@ -181,18 +181,6 @@ jobs:
 
           # 获取目标用户所有仓库
           repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
-          REPO_COUNT=$(echo "$repos" | wc -l)
-
-          # 根据仓库数量设置并行数（最多 8，最少 2）
-          if (( REPO_COUNT <= 5 )); then
-            PARALLEL=2
-          elif (( REPO_COUNT <= 20 )); then
-            PARALLEL=4
-          else
-            PARALLEL=8
-          fi
-
-          echo "共有 $REPO_COUNT 个仓库，使用 $PARALLEL 个并行任务处理"
 
           # 获取自己已 Star 仓库
           starred=$(gh repo list --json nameWithOwner -q '.[].nameWithOwner')
@@ -202,8 +190,24 @@ jobs:
           my_repos=$(gh repo list $GITHUB_ACTOR --json nameWithOwner -q '.[].nameWithOwner')
           my_repos_set=$(echo "$my_repos" | sort)
 
-          process_repo() {
+          # 并行限制（可调整，太高可能触发 rate limit）
+          MAX_PARALLEL=8
+          CURRENT_JOBS=0
+
+          # 创建日志文件
+          : > update.md
+
+          increment_jobs() {
+            CURRENT_JOBS=$((CURRENT_JOBS + 1))
+          }
+
+          decrement_jobs() {
+            CURRENT_JOBS=$((CURRENT_JOBS - 1))
+          }
+
+          process_repo_async() {
             repo=$1
+
             log=""
             star_count=0
             fork_count=0
@@ -218,7 +222,7 @@ jobs:
             fi
 
             # 🍴 Fork 判断
-            REPONAME=$(echo "$repo" | cut -d'/' -f2)
+            REPONAME=$(echo "$repo" | cut -d"/" -f2)
             MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
 
             if echo "$my_repos_set" | grep -qx "$MY_REPO"; then
@@ -229,36 +233,52 @@ jobs:
               fork_count=1
             fi
 
-            # 输出日志和计数，用逗号分隔
+            # 写入日志（原子操作）
+            {
             echo -e "$log"
-           echo "$star_count,$fork_count"
+            echo "$star_count,$fork_count"
+            } >> update.tmp
           }
 
-          # 并行处理仓库
-          results=$(echo "$repos" | xargs -n1 -P$PARALLEL -I{} bash -c 'process_repo "$@"' _ {})
+          # 遍历仓库
+          for repo in $repos; do
+            # 控制并行数
+            while (( CURRENT_JOBS >= MAX_PARALLEL )); do
+              sleep 0.5
+            done
+
+            process_repo_async "$repo" &
+            increment_jobs
+          done
+
+          # 等待所有后台任务完成
+          wait
 
           # 汇总结果
           STAR_COUNT=0
           FORK_COUNT=0
           LOGS=""
-
+ 
           while IFS= read -r line; do
             if [[ $line == *,* ]]; then
               sc=$(echo $line | cut -d',' -f1)
               fc=$(echo $line | cut -d',' -f2)
-              STAR_COUNT=$((STAR_COUNT+sc))
-              FORK_COUNT=$((FORK_COUNT+fc))
+              STAR_COUNT=$((STAR_COUNT + sc))
+              FORK_COUNT=$((FORK_COUNT + fc))
             else
               LOGS+="$line\n"
             fi
-          done <<< "$results"
+          done < update.tmp
 
-          # 写入日志
+          # 写最终日志
           echo -e "$LOGS" >> update.md
           echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
 
           echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
           echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
+
+          # 删除临时文件
+          rm -f update.tmp
 
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
