@@ -176,45 +176,50 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          TARGET_USER="MooCheelee"  # 👈 改成你要操作的 GitHub 用户名
+          TARGET_USER="MooCheelee"
 
           echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
-          repos=$(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner')
+
+          # 获取用户所有仓库名
+          repos=($(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner'))
+
+          # 获取已 Star 的仓库名
+          starred=($(gh api user/starred --paginate --jq '.[].full_name'))
+
+          # 获取已 Fork 的仓库名（forks 在自己账号下）
+          forked=($(gh repo list "${GITHUB_ACTOR}" --json nameWithOwner,isFork -q '.[] | select(.isFork) | .nameWithOwner'))
 
           STAR_COUNT=0
           FORK_COUNT=0
 
-          for repo in $repos; do
+          for repo in "${repos[@]}"; do
             echo "检查仓库: $repo"
 
-            # ⭐ 检查是否已加星
-            if gh api "user/starred/$repo" &>/dev/null; then
-              echo "✅ 已加星过 $repo，跳过 ⭐"
-            else
+            # ⭐ 若未加星，则加星
+            if [[ ! " ${starred[@]} " =~ " ${repo} " ]]; then
               gh api --method PUT "user/starred/$repo"
               echo "⭐ Starred $repo" >> update.md
               STAR_COUNT=$((STAR_COUNT+1))
-            fi
-
-            # 🍴 检查是否已 Fork
-            USERNAME=$(echo "$repo" | cut -d'/' -f1)
-            REPONAME=$(echo "$repo" | cut -d'/' -f2)
-            MY_REPO="${GITHUB_ACTOR}/${REPONAME}"
-
-            if gh repo view "$MY_REPO" &>/dev/null; then
-              echo "✅ 已 Fork 过 $repo，跳过 🍴"
             else
-              gh repo fork "$repo" --clone=false --default-branch-only
-              echo "🍴 Forked $repo" >> update.md
-              FORK_COUNT=$((FORK_COUNT+1))
+              echo "✅ 已加星过 $repo，跳过 ⭐"
             fi
-          done
 
-          echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
+            # 🍴 若未 Fork，则 Fork
+            my_fork="${GITHUB_ACTOR}/$(echo "$repo" | cut -d'/' -f2)"
+              if [[ ! " ${forked[@]} " =~ " ${my_fork} " ]]; then
+                gh repo fork "$repo" --clone=false --default-branch-only
+                echo "🍴 Forked $repo" >> update.md
+                FORK_COUNT=$((FORK_COUNT+1))
+              else
+                echo "✅ 已 Fork 过 $repo，跳过 🍴"
+              fi
+            done
 
-          echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
-          echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
-          
+            echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
+
+            echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
+            echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
+
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
