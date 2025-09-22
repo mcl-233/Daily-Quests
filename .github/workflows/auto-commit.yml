@@ -83,7 +83,7 @@ jobs:
           RAND=$((RANDOM % 100 + 1))
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          if [ $RAND -le 65 ]; then
+          if [ $RAND -le 100 ]; then
             LABELS=("bug" "enhancement" "discussion")
             LABEL=${LABELS[$RANDOM % ${#LABELS[@]}]}
             gh issue create --title "Daily Issue - $(date '+%Y-%m-%d %H:%M:%S')" \
@@ -109,7 +109,7 @@ jobs:
           RAND=$((RANDOM % 100 + 1))
           git config user.name "$GH_USER"
           git config user.email "$GH_EMAIL"
-          if [ $RAND -le 65 ]; then
+          if [ $RAND -le 100 ]; then
             BRANCH="daily-pr-$(date '+%Y%m%d%H%M%S')"
             git checkout -b "$BRANCH"
             echo "[$(date '+%H:%M:%S')] 📦 自动 PR 日志" >> update.md
