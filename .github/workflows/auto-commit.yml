@@ -169,57 +169,7 @@ jobs:
           git commit -m "chore: update closed issue log" || echo "No changes"
           git push origin HEAD:main
 
-      # 11. Star & Fork all repos of a specific user (with duplicate check)
-      - name: Star & Fork user repos
-        if: steps.lazy.outputs.lazy != 'true'
-        id: starforkuser
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          TARGET_USER="MooCheelee"
-
-          echo "开始处理 $TARGET_USER 的仓库 ⭐🍴"
-
-          # 获取用户所有仓库名
-          repos=($(gh repo list $TARGET_USER --json nameWithOwner -q '.[].nameWithOwner'))
-
-          # 获取已 Star 的仓库名
-          starred=($(gh api user/starred --paginate --jq '.[].full_name'))
-
-          # 获取已 Fork 的仓库名（forks 在自己账号下）
-          forked=($(gh repo list "${GITHUB_ACTOR}" --json nameWithOwner,isFork -q '.[] | select(.isFork) | .nameWithOwner'))
-
-          STAR_COUNT=0
-          FORK_COUNT=0
-
-          for repo in "${repos[@]}"; do
-            echo "检查仓库: $repo"
-
-            # ⭐ 若未加星，则加星
-            if [[ ! " ${starred[@]} " =~ " ${repo} " ]]; then
-              gh api --method PUT "user/starred/$repo"
-              echo "⭐ Starred $repo" >> update.md
-              STAR_COUNT=$((STAR_COUNT+1))
-            else
-              echo "✅ 已加星过 $repo，跳过 ⭐"
-            fi
-
-            # 🍴 若未 Fork，则 Fork
-            my_fork="${GITHUB_ACTOR}/$(echo "$repo" | cut -d'/' -f2)"
-              if [[ ! " ${forked[@]} " =~ " ${my_fork} " ]]; then
-                gh repo fork "$repo" --clone=false --default-branch-only
-                echo "🍴 Forked $repo" >> update.md
-                FORK_COUNT=$((FORK_COUNT+1))
-              else
-                echo "✅ 已 Fork 过 $repo，跳过 🍴"
-              fi
-            done
-
-            echo "⭐ 共新增 $STAR_COUNT 个 Star, 🍴 共新增 $FORK_COUNT 个 Fork" >> update.md
-
-            echo "STAR_USER_COUNT=$STAR_COUNT" >> $GITHUB_OUTPUT
-            echo "FORK_USER_COUNT=$FORK_COUNT" >> $GITHUB_OUTPUT
-
+      
       # 12. Clean up old merged branches
       - name: Clean up old merged branches
         if: steps.lazy.outputs.lazy != 'true'
